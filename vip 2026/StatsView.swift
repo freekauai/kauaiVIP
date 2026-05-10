@@ -93,11 +93,11 @@ struct StatsView: View {
             for (month, trips) in groups {
                 for t in trips {
                     rows.append([
-                        "\"\(month)\"", t.formattedDate, t.vehicle.rawValue,
-                        t.service.rawValue, "\"\(t.clientName)\"",
+                        csvq(month), t.formattedDate, t.vehicle.rawValue,
+                        t.service.rawValue, csvq(t.clientName),
                         t.formattedPickup, t.formattedDropoff,
                         t.formattedLeftBase, t.formattedBackBase,
-                        "\"\(t.notes)\""
+                        csvq(t.notes)
                     ].joined(separator: ","))
                 }
             }
@@ -330,6 +330,10 @@ struct StatsView: View {
     }
 
     // MARK: - Helpers
+
+    private func csvq(_ s: String) -> String {
+        "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
 
     private func uniqueDays(_ trips: [Trip]) -> Int {
         Set(trips.map { Calendar.current.startOfDay(for: $0.date) }).count

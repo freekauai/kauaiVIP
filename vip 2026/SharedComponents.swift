@@ -488,7 +488,7 @@ func shareFile(data: Data, filename: String) {
     try? data.write(to: url)
     let vc = UIActivityViewController(activityItems: [url], applicationActivities: nil)
     if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-       let root  = scene.windows.first?.rootViewController {
+       let root  = scene.keyWindow?.rootViewController {
         root.present(vc, animated: true)
     }
 }

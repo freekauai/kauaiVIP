@@ -307,15 +307,19 @@ extension PayPeriod {
                 t.formattedDate,
                 t.vehicle.rawValue,
                 t.service.rawValue,
-                "\"\(t.clientName)\"",
+                csvQuote(t.clientName),
                 t.formattedPickup,
                 t.formattedDropoff,
                 t.formattedLeftBase,
                 t.formattedBackBase,
-                "\"\(t.notes)\""
+                csvQuote(t.notes)
             ].joined(separator: ",")
             rows.append(row)
         }
         return rows.joined(separator: "\n")
     }
+}
+
+private func csvQuote(_ s: String) -> String {
+    "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\""
 }

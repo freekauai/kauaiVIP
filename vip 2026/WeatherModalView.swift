@@ -217,10 +217,10 @@ struct WeatherModalView: View {
                 Text("🌊 SURF CONDITIONS").labelStyle()
 
                 let items: [ConditionItem] = [
-                    .init(id: "Wave Height",   icon: "water.waves",          value: weatherManager.waveHeightFt),
+                    .init(id: "Wave Height",   icon: "waveform",              value: weatherManager.waveHeightFt),
                     .init(id: "Wave Period",   icon: "clock.fill",            value: weatherManager.wavePeriodSec),
                     .init(id: "Direction",     icon: "arrow.up.circle.fill",  value: weatherManager.waveDirection),
-                    .init(id: "Swell Height",  icon: "water.waves.and.arrow.up", value: weatherManager.swellHeightFt),
+                    .init(id: "Swell Height",  icon: "waveform.path",         value: weatherManager.swellHeightFt),
                     .init(id: "Swell Period",  icon: "timer",                 value: weatherManager.swellPeriodSec),
                 ]
 

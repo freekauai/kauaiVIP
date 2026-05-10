@@ -239,10 +239,10 @@ struct CSVImportView: View {
                 return cal.date(from: comps)
             }
 
-            let pu = parseTime(puStr)
-            let dо = parseTime(doStr)
-            let lb = parseTime(lbStr)
-            let bb = parseTime(bbStr)
+            let puTime = parseTime(puStr)
+            let doTime = parseTime(doStr)
+            let lbTime = parseTime(lbStr)
+            let bbTime = parseTime(bbStr)
 
             trips.append(Trip(
                 date:          tripDate,
@@ -250,10 +250,10 @@ struct CSVImportView: View {
                 service:       service,
                 clientName:    clientStr,
                 notes:         notesStr,
-                hasPUTime:     pu != nil, pickupTime:   pu,
-                hasDOTime:     dо != nil, dropoffTime:  dо,
-                hasLeftBase:   lb != nil, timeLeftBase: lb,
-                hasBackBase:   bb != nil, timeBackBase: bb
+                hasPUTime:     puTime != nil, pickupTime:   puTime,
+                hasDOTime:     doTime != nil, dropoffTime:  doTime,
+                hasLeftBase:   lbTime != nil, timeLeftBase: lbTime,
+                hasBackBase:   bbTime != nil, timeBackBase: bbTime
             ))
         }
 
@@ -284,8 +284,12 @@ struct CSVImportView: View {
     // MARK: - Import
 
     private func doImport() {
-        var period       = PayPeriod(startDate: startDate, endDate: endDate)
-        period.trips     = parsedTrips
+        guard endDate >= startDate else {
+            parseError = "End date must be on or after start date."
+            return
+        }
+        var period   = PayPeriod(startDate: startDate, endDate: endDate)
+        period.trips = parsedTrips
         store.addPeriod(period)
         dismiss()
     }

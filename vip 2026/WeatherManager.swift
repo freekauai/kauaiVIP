@@ -101,9 +101,14 @@ class WeatherManager: ObservableObject {
 
     // MARK: - Fetch
     func fetchWeather() async {
-        isLoading  = true
-        fetchError = nil
-        moonPhaseEmoji = computeMoonPhaseEmoji()
+        isLoading      = true
+        fetchError     = nil
+        waveHeightFt   = "--ft"
+        wavePeriodSec  = "--s"
+        waveDirection  = "--"
+        swellHeightFt  = "--ft"
+        swellPeriodSec = "--s"
+        updateMoonPhase()
 
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         components.queryItems = [
@@ -289,27 +294,24 @@ class WeatherManager: ObservableObject {
     }
 
     // MARK: - Moon phase (synodic calculation, no API needed)
-    private func computeMoonPhaseEmoji() -> String {
+    private func updateMoonPhase() {
         // Reference new moon: Jan 6, 2000 18:14 UTC
-        let refNewMoon = Date(timeIntervalSince1970: 947182440)
+        let refNewMoon  = Date(timeIntervalSince1970: 947182440)
         let synodicDays = 29.53059
         var phase = Date().timeIntervalSince(refNewMoon) / 86400
         phase = phase.truncatingRemainder(dividingBy: synodicDays) / synodicDays
         if phase < 0 { phase += 1 }
-        let (emoji, name): (String, String)
         switch phase {
-        case 0..<0.0625:       (emoji, name) = ("🌑", "New Moon")
-        case 0.0625..<0.1875:  (emoji, name) = ("🌒", "Waxing Crescent")
-        case 0.1875..<0.3125:  (emoji, name) = ("🌓", "First Quarter")
-        case 0.3125..<0.4375:  (emoji, name) = ("🌔", "Waxing Gibbous")
-        case 0.4375..<0.5625:  (emoji, name) = ("🌕", "Full Moon")
-        case 0.5625..<0.6875:  (emoji, name) = ("🌖", "Waning Gibbous")
-        case 0.6875..<0.8125:  (emoji, name) = ("🌗", "Last Quarter")
-        case 0.8125..<0.9375:  (emoji, name) = ("🌘", "Waning Crescent")
-        default:               (emoji, name) = ("🌑", "New Moon")
+        case 0..<0.0625:       moonPhaseEmoji = "🌑"; moonPhaseName = "New Moon"
+        case 0.0625..<0.1875:  moonPhaseEmoji = "🌒"; moonPhaseName = "Waxing Crescent"
+        case 0.1875..<0.3125:  moonPhaseEmoji = "🌓"; moonPhaseName = "First Quarter"
+        case 0.3125..<0.4375:  moonPhaseEmoji = "🌔"; moonPhaseName = "Waxing Gibbous"
+        case 0.4375..<0.5625:  moonPhaseEmoji = "🌕"; moonPhaseName = "Full Moon"
+        case 0.5625..<0.6875:  moonPhaseEmoji = "🌖"; moonPhaseName = "Waning Gibbous"
+        case 0.6875..<0.8125:  moonPhaseEmoji = "🌗"; moonPhaseName = "Last Quarter"
+        case 0.8125..<0.9375:  moonPhaseEmoji = "🌘"; moonPhaseName = "Waning Crescent"
+        default:               moonPhaseEmoji = "🌑"; moonPhaseName = "New Moon"
         }
-        moonPhaseName = name
-        return emoji
     }
 
     private func buildAdvisory(mph: Double, wmoCode: Int, uvVal: Int) -> [String] {
