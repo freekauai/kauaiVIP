@@ -92,10 +92,6 @@ class TimesheetStore: ObservableObject {
         return rows.joined(separator: "\n")
     }
 
-    private func csvQuote(_ s: String) -> String {
-        "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\""
-    }
-
     // MARK: - Persistence
     private func save() {
         guard let data = try? JSONEncoder().encode(periods) else { return }

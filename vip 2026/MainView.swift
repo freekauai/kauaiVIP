@@ -17,6 +17,7 @@ struct MainView: View {
     @State private var selectedPeriod:   PayPeriod? = nil
     @State private var didAutoNavigate   = false
 
+
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
@@ -214,6 +215,7 @@ struct MainView: View {
                         .padding(.bottom, AppTheme.elemSpacing)
                 }
             }
+
         }
     }
 }

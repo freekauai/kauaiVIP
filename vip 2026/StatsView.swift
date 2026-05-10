@@ -52,11 +52,11 @@ struct StatsView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Menu {
-                        Button(action: exportScopeCSV) {
-                            Label("Export \(scope.rawValue) (CSV)", systemImage: "tablecells")
+                        Button(action: exportScopePDF) {
+                            Label("Export PDF", systemImage: "doc.fill")
                         }
-                        Button(action: exportAllCSV) {
-                            Label("Export All Trips (CSV)", systemImage: "tablecells.badge.ellipsis")
+                        Button(action: exportScopeCSV) {
+                            Label("Export CSV", systemImage: "tablecells")
                         }
                     } label: {
                         Image(systemName: "square.and.arrow.up")
@@ -75,9 +75,26 @@ struct StatsView: View {
 
     // MARK: - Export
 
-    private func exportAllCSV() {
-        let data = Data(store.allTripsCsvString.utf8)
-        shareFile(data: data, filename: "KauaiVIP_AllTrips.csv")
+    private func exportScopePDF() {
+        let sections: [(String, [Trip])]
+        let filename: String
+        switch scope {
+        case .allTime:
+            sections = [("All Trips", allTrips)]
+            filename = "KauaiVIP_AllTime.pdf"
+        case .periods:
+            sections = store.periods.map { ($0.label, $0.trips) }
+            filename = "KauaiVIP_Periods.pdf"
+        case .monthly:
+            sections = monthlyGroups()
+            filename = "KauaiVIP_Monthly.pdf"
+        }
+        let data = makeStatsPDF(
+            title: "\(scope.rawValue) Report",
+            sections: sections,
+            driverName: store.driverName
+        )
+        shareFile(data: data, filename: filename)
     }
 
     private func exportScopeCSV() {
@@ -93,11 +110,11 @@ struct StatsView: View {
             for (month, trips) in groups {
                 for t in trips {
                     rows.append([
-                        csvq(month), t.formattedDate, t.vehicle.rawValue,
-                        t.service.rawValue, csvq(t.clientName),
+                        csvQuote(month), t.formattedDate, t.vehicle.rawValue,
+                        t.service.rawValue, csvQuote(t.clientName),
                         t.formattedPickup, t.formattedDropoff,
                         t.formattedLeftBase, t.formattedBackBase,
-                        csvq(t.notes)
+                        csvQuote(t.notes)
                     ].joined(separator: ","))
                 }
             }
@@ -331,9 +348,6 @@ struct StatsView: View {
 
     // MARK: - Helpers
 
-    private func csvq(_ s: String) -> String {
-        "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\""
-    }
 
     private func uniqueDays(_ trips: [Trip]) -> Int {
         Set(trips.map { Calendar.current.startOfDay(for: $0.date) }).count

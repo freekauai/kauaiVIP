@@ -35,8 +35,11 @@ struct AppHeader: View {
 // MARK: - Traffic / Bridge Status Banner
 struct TrafficBanner: View {
     @EnvironmentObject var bridgeService: BridgeService
+    @State private var showFAQ = false
 
     var body: some View {
+        let textColor: Color = bridgeService.level == .caution ? .black : .white
+
         HStack(spacing: 8) {
             Text(bridgeService.level.bannerIcon)
             Text("Traffic: \(bridgeService.trafficLevel)")
@@ -50,13 +53,22 @@ struct TrafficBanner: View {
                     .font(.system(size: 11))
                     .opacity(0.75)
             }
+            Button { showFAQ = true } label: {
+                Text("?")
+                    .font(.system(size: 11, weight: .bold))
+                    .frame(width: 20, height: 20)
+                    .background(textColor.opacity(0.18))
+                    .clipShape(Circle())
+                    .foregroundColor(textColor)
+            }
         }
         .font(.system(size: 13))
-        .foregroundColor(bridgeService.level == .caution ? .black : .white)
+        .foregroundColor(textColor)
         .padding(.horizontal, AppTheme.screenPad)
         .padding(.vertical, 9)
         .background(bridgeService.level.statusColor)
         .animation(.easeInOut(duration: 0.3), value: bridgeService.level.rawValue)
+        .sheet(isPresented: $showFAQ) { FAQView() }
     }
 }
 
@@ -485,12 +497,29 @@ struct WeatherIcon: View {
 // MARK: - Share File Helper
 func shareFile(data: Data, filename: String) {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-    try? data.write(to: url)
+    do {
+        try data.write(to: url, options: .atomic)
+    } catch {
+        showAlert("Export Failed", message: "Could not write file: \(error.localizedDescription)")
+        return
+    }
     let vc = UIActivityViewController(activityItems: [url], applicationActivities: nil)
     if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
        let root  = scene.keyWindow?.rootViewController {
-        root.present(vc, animated: true)
+        var top = root
+        while let presented = top.presentedViewController { top = presented }
+        top.present(vc, animated: true)
     }
+}
+
+private func showAlert(_ title: String, message: String) {
+    guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+          let root  = scene.keyWindow?.rootViewController else { return }
+    var top = root
+    while let presented = top.presentedViewController { top = presented }
+    let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+    alert.addAction(UIAlertAction(title: "OK", style: .default))
+    top.present(alert, animated: true)
 }
 
 // MARK: - Divider
@@ -519,5 +548,112 @@ struct EmptyStateView: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - FAQ View
+struct FAQView: View {
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.oceanDeep.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Header
+                        VStack(spacing: 8) {
+                            Text("🏝️")
+                                .font(.system(size: 56))
+                            Text("KAUAI VIP 2026")
+                                .font(.system(size: 20, weight: .black, design: .rounded))
+                                .foregroundColor(AppTheme.textPrimary)
+                                .tracking(2)
+                            Text("Driver Timesheet System")
+                                .font(.system(size: 13))
+                                .foregroundColor(AppTheme.textTertiary)
+                        }
+                        .padding(.top, 24)
+
+                        // Developer card
+                        AppCard {
+                            VStack(alignment: .leading, spacing: 14) {
+                                Text("DEVELOPER").labelStyle()
+
+                                HStack(spacing: 14) {
+                                    Text("👨‍💻").font(.system(size: 34))
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Joey Wray")
+                                            .font(.system(size: 18, weight: .bold))
+                                            .foregroundColor(AppTheme.textPrimary)
+                                        Link("joeywray.com", destination: URL(string: "https://joeywray.com")!)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(AppTheme.coral)
+                                    }
+                                }
+
+                                Divider().background(AppTheme.oceanLight)
+
+                                Link(destination: URL(string: "mailto:Joey@joeywray.com?subject=Kauai%20VIP%202026%20Feedback")!) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "envelope.fill")
+                                            .font(.system(size: 18))
+                                            .foregroundColor(AppTheme.coral)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text("Questions or Suggestions?")
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundColor(AppTheme.textPrimary)
+                                            Text("Joey@joeywray.com")
+                                                .font(.system(size: 13))
+                                                .foregroundColor(AppTheme.coral)
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundColor(AppTheme.textTertiary)
+                                    }
+                                }
+
+                                Divider().background(AppTheme.oceanLight)
+
+                                Link(destination: URL(string: "https://venmo.com/u/Joey-Wray-1")!) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "heart.fill")
+                                            .font(.system(size: 18))
+                                            .foregroundColor(AppTheme.success)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text("Donate")
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundColor(AppTheme.textPrimary)
+                                            Text("venmo.com/u/Joey-Wray-1")
+                                                .font(.system(size: 13))
+                                                .foregroundColor(AppTheme.success)
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundColor(AppTheme.textTertiary)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, AppTheme.screenPad)
+                    }
+                    .padding(.bottom, 40)
+                }
+            }
+            .navigationTitle("About")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AppTheme.oceanDeep, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundColor(AppTheme.coral)
+                        .fontWeight(.semibold)
+                }
+            }
+        }
     }
 }

@@ -25,7 +25,6 @@ struct KauaiMapView: View {
 
     @State private var selectedLocation: KauaiLocation? = nil
     @State private var mapStyle: MapStyle = .standard(elevation: .realistic, pointsOfInterest: .all, showsTraffic: true)
-    @State private var useTrafficOverlay = true
     @State private var coordsCopied = false
 
     // Camera centered on Kauai
@@ -224,12 +223,7 @@ struct KauaiMapView: View {
             HStack(spacing: 12) {
                 // Navigate in Apple Maps
                 Button {
-                    let item: MKMapItem
-                    if #available(iOS 17.0, *) {
-                        item = MKMapItem(location: CLLocation(latitude: loc.coord.latitude, longitude: loc.coord.longitude), address: nil)
-                    } else {
-                        item = MKMapItem(placemark: MKPlacemark(coordinate: loc.coord))
-                    }
+                    let item = MKMapItem(placemark: MKPlacemark(coordinate: loc.coord))
                     item.name = loc.name
                     item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
                 } label: {
