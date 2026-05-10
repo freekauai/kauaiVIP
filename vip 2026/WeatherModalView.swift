@@ -37,6 +37,12 @@ struct WeatherModalView: View {
                             hourlyCard
                         }
 
+                        // ── Moon Phase ──────────────────────────────────
+                        moonCard
+
+                        // ── Surf Conditions ─────────────────────────────
+                        surfCard
+
                         // ── Conditions Grid ─────────────────────────────
                         conditionsGrid
 
@@ -183,6 +189,67 @@ struct WeatherModalView: View {
         }
     }
 
+    // MARK: - Moon Card
+    private var moonCard: some View {
+        AppCard {
+            HStack(spacing: 16) {
+                Text(weatherManager.moonPhaseEmoji)
+                    .font(.system(size: 44))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("MOON PHASE").labelStyle()
+                    Text(weatherManager.moonPhaseName)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(AppTheme.textPrimary)
+                    Text("Kauai, Hawaii")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppTheme.textTertiary)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    // MARK: - Surf Card
+    private var surfCard: some View {
+        AppCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("🌊 SURF CONDITIONS").labelStyle()
+
+                let items: [ConditionItem] = [
+                    .init(id: "Wave Height",   icon: "water.waves",          value: weatherManager.waveHeightFt),
+                    .init(id: "Wave Period",   icon: "clock.fill",            value: weatherManager.wavePeriodSec),
+                    .init(id: "Direction",     icon: "arrow.up.circle.fill",  value: weatherManager.waveDirection),
+                    .init(id: "Swell Height",  icon: "water.waves.and.arrow.up", value: weatherManager.swellHeightFt),
+                    .init(id: "Swell Period",  icon: "timer",                 value: weatherManager.swellPeriodSec),
+                ]
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    ForEach(items) { item in
+                        HStack(spacing: 10) {
+                            Image(systemName: item.icon)
+                                .font(.system(size: 16))
+                                .foregroundColor(Color(hex: "4FC3F7"))
+                                .frame(width: 22)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.id)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(AppTheme.textTertiary)
+                                Text(item.value)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(AppTheme.textPrimary)
+                            }
+                        }
+                    }
+                }
+
+                Text("Source: Open-Meteo Marine · North Pacific swell")
+                    .font(.system(size: 10))
+                    .foregroundColor(AppTheme.textTertiary)
+            }
+        }
+    }
+
     // MARK: - Bridge Card
     private var bridgeCard: some View {
         AppCard {
@@ -236,7 +303,7 @@ struct WeatherModalView: View {
             if let updated = weatherManager.lastUpdated {
                 Text("Updated: \(updated.formatted(date: .omitted, time: .shortened))")
             }
-            Text("Source: Open-Meteo · Lihue, Kauai (21.97°N, 159.37°W)")
+            Text("Weather: Open-Meteo · Surf: Open-Meteo Marine · Moon: computed")
         }
         .font(.system(size: 11))
         .foregroundColor(AppTheme.textTertiary)

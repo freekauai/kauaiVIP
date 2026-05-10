@@ -104,6 +104,10 @@ struct PeriodTopButtons: View {
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(AppTheme.textSecondary)
                             .lineLimit(1)
+                        Text("\(weatherManager.moonPhaseEmoji) · 🌊 \(weatherManager.waveHeightFt)")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(AppTheme.textTertiary)
+                            .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")
@@ -475,6 +479,17 @@ struct WeatherIcon: View {
         Image(systemName: symbolName)
             .symbolRenderingMode(.multicolor)
             .font(.system(size: size, weight: .medium))
+    }
+}
+
+// MARK: - Share File Helper
+func shareFile(data: Data, filename: String) {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+    try? data.write(to: url)
+    let vc = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+       let root  = scene.windows.first?.rootViewController {
+        root.present(vc, animated: true)
     }
 }
 

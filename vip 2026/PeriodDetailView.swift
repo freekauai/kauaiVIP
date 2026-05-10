@@ -73,8 +73,15 @@ struct PeriodDetailView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: exportPDF) {
-                    Label("Export PDF", systemImage: "square.and.arrow.up")
+                Menu {
+                    Button(action: exportPDF) {
+                        Label("Export PDF", systemImage: "doc.fill")
+                    }
+                    Button(action: exportCSV) {
+                        Label("Export CSV", systemImage: "tablecells")
+                    }
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
                         .foregroundColor(AppTheme.coral)
                 }
             }
@@ -154,16 +161,16 @@ struct PeriodDetailView: View {
     // MARK: - Export
     private func exportPDF() {
         guard let period = period else { return }
-        let data     = period.pdfData(driverName: store.driverName)
-        let filename = "KauaiVIP_\(period.label.replacingOccurrences(of: " ", with: "_")).pdf"
-        let tempURL  = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-        try? data.write(to: tempURL)
+        let safe = period.label.replacingOccurrences(of: " ", with: "_")
+        shareFile(data: period.pdfData(driverName: store.driverName),
+                  filename: "KauaiVIP_\(safe).pdf")
+    }
 
-        let controller = UIActivityViewController(activityItems: [tempURL], applicationActivities: nil)
-        if let scene   = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let root    = scene.windows.first?.rootViewController {
-            root.present(controller, animated: true)
-        }
+    private func exportCSV() {
+        guard let period = period else { return }
+        let safe = period.label.replacingOccurrences(of: " ", with: "_")
+        let data = Data(period.csvString.utf8)
+        shareFile(data: data, filename: "KauaiVIP_\(safe).csv")
     }
 }
 

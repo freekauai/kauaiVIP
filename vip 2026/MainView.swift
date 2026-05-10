@@ -13,6 +13,7 @@ struct MainView: View {
     @Binding var activeModal: ContentView.AppModal?
 
     @State private var showNewPeriod     = false
+    @State private var showCSVImport     = false
     @State private var selectedPeriod:   PayPeriod? = nil
     @State private var didAutoNavigate   = false
 
@@ -71,6 +72,9 @@ struct MainView: View {
             }
             .sheet(isPresented: $showNewPeriod) {
                 NewPeriodView()
+            }
+            .sheet(isPresented: $showCSVImport) {
+                CSVImportView().environmentObject(store)
             }
         }
     }
@@ -180,7 +184,21 @@ struct MainView: View {
     // MARK: - Period List
     private var periodListSection: some View {
         VStack(spacing: 0) {
-            SectionLabel(text: "Timesheet Periods")
+            HStack(alignment: .firstTextBaseline) {
+                Text("TIMESHEET PERIODS")
+                    .font(.system(size: AppTheme.caption, weight: .semibold))
+                    .foregroundColor(AppTheme.textTertiary)
+                    .tracking(0.8)
+                Spacer()
+                Button(action: { showCSVImport = true }) {
+                    Label("Import CSV", systemImage: "square.and.arrow.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(AppTheme.coral)
+                }
+            }
+            .padding(.horizontal, AppTheme.screenPad)
+            .padding(.top, AppTheme.sectionSpacing)
+            .padding(.bottom, 6)
 
             if store.periods.isEmpty {
                 EmptyStateView(

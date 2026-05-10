@@ -50,6 +50,20 @@ struct StatsView: View {
             .toolbarBackground(AppTheme.oceanDeep, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Menu {
+                        Button(action: exportScopeCSV) {
+                            Label("Export \(scope.rawValue) (CSV)", systemImage: "tablecells")
+                        }
+                        Button(action: exportAllCSV) {
+                            Label("Export All Trips (CSV)", systemImage: "tablecells.badge.ellipsis")
+                        }
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundColor(AppTheme.coral)
+                    }
+                    .disabled(store.periods.isEmpty)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                         .foregroundColor(AppTheme.coral)
@@ -57,6 +71,39 @@ struct StatsView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Export
+
+    private func exportAllCSV() {
+        let data = Data(store.allTripsCsvString.utf8)
+        shareFile(data: data, filename: "KauaiVIP_AllTrips.csv")
+    }
+
+    private func exportScopeCSV() {
+        let csv: String
+        switch scope {
+        case .allTime:
+            csv = store.allTripsCsvString
+        case .periods:
+            csv = store.allTripsCsvString  // same data, period column already included
+        case .monthly:
+            let groups = monthlyGroups()
+            var rows = ["Month,Date,Vehicle,Service,Client,PU Time,DO Time,Left Base,Back Base,Notes"]
+            for (month, trips) in groups {
+                for t in trips {
+                    rows.append([
+                        "\"\(month)\"", t.formattedDate, t.vehicle.rawValue,
+                        t.service.rawValue, "\"\(t.clientName)\"",
+                        t.formattedPickup, t.formattedDropoff,
+                        t.formattedLeftBase, t.formattedBackBase,
+                        "\"\(t.notes)\""
+                    ].joined(separator: ","))
+                }
+            }
+            csv = rows.joined(separator: "\n")
+        }
+        shareFile(data: Data(csv.utf8), filename: "KauaiVIP_\(scope.rawValue.replacingOccurrences(of: " ", with: "")).csv")
     }
 
     // MARK: - All Time
@@ -104,37 +151,53 @@ struct StatsView: View {
             if store.periods.isEmpty {
                 EmptyStateView(icon: "📋", message: "No Periods", sub: "Add a pay period to see stats.")
             } else {
-                SectionLabel(text: "\(store.periods.count) Pay Periods")
                 ForEach(store.periods) { period in
-                    periodRow(period)
-                        .padding(.horizontal, AppTheme.screenPad)
-                        .padding(.bottom, AppTheme.elemSpacing)
+                    periodSection(period)
                 }
             }
         }
     }
 
-    private func periodRow(_ period: PayPeriod) -> some View {
-        AppCard {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(period.label)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(AppTheme.textPrimary)
+    private func periodSection(_ period: PayPeriod) -> some View {
+        VStack(spacing: 0) {
+            SectionLabel(text: period.label)
 
+            AppCard {
                 HStack(spacing: 0) {
-                    SmallStat(label: "Trips",   value: "\(period.trips.count)",              color: AppTheme.textPrimary)
-                    Divider().frame(height: 32).background(AppTheme.oceanLight).padding(.horizontal, 10)
-                    SmallStat(label: "Charter", value: "\(charterTrips(period.trips))",       color: AppTheme.success)
-                    Divider().frame(height: 32).background(AppTheme.oceanLight).padding(.horizontal, 10)
-                    SmallStat(label: "Hours",   value: charterHoursFormatted(period.trips),  color: AppTheme.warning)
-                    Divider().frame(height: 32).background(AppTheme.oceanLight).padding(.horizontal, 10)
-                    SmallStat(label: "Days",    value: "\(period.dayCount)",                  color: AppTheme.info)
-                }
-
-                if !period.trips.isEmpty {
-                    serviceBar(trips: period.trips)
+                    BigStat(label: "Trips",   value: "\(period.trips.count)",          color: AppTheme.textPrimary)
+                    Divider().frame(height: 44).background(AppTheme.oceanLight).padding(.horizontal, 12)
+                    BigStat(label: "Charter", value: "\(charterTrips(period.trips))",  color: AppTheme.success)
+                    Divider().frame(height: 44).background(AppTheme.oceanLight).padding(.horizontal, 12)
+                    BigStat(label: "Days",    value: "\(period.dayCount)",              color: AppTheme.info)
                 }
             }
+            .padding(.horizontal, AppTheme.screenPad)
+
+            AppCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Charter Hours").labelStyle()
+                    Text(charterHoursFormatted(period.trips))
+                        .font(.system(size: 36, weight: .black, design: .rounded))
+                        .foregroundColor(AppTheme.warning)
+                }
+            }
+            .padding(.horizontal, AppTheme.screenPad)
+            .padding(.top, AppTheme.cardSpacing)
+
+            if !period.trips.isEmpty {
+                SectionLabel(text: "By Service Type")
+                serviceBreakdown(trips: period.trips)
+                    .padding(.horizontal, AppTheme.screenPad)
+
+                SectionLabel(text: "By Vehicle")
+                vehicleBreakdown(trips: period.trips)
+                    .padding(.horizontal, AppTheme.screenPad)
+            }
+
+            Divider()
+                .background(AppTheme.oceanLight.opacity(0.4))
+                .padding(.horizontal, AppTheme.screenPad)
+                .padding(.top, AppTheme.cardSpacing)
         }
     }
 
@@ -146,35 +209,53 @@ struct StatsView: View {
             if groups.isEmpty {
                 EmptyStateView(icon: "📅", message: "No Data", sub: "Log trips to see monthly stats.")
             } else {
-                SectionLabel(text: "\(groups.count) Months")
                 ForEach(groups, id: \.0) { month, trips in
-                    monthRow(month: month, trips: trips)
-                        .padding(.horizontal, AppTheme.screenPad)
-                        .padding(.bottom, AppTheme.elemSpacing)
+                    monthSection(month: month, trips: trips)
                 }
             }
         }
     }
 
-    private func monthRow(month: String, trips: [Trip]) -> some View {
-        AppCard {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(month)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(AppTheme.textPrimary)
+    private func monthSection(month: String, trips: [Trip]) -> some View {
+        VStack(spacing: 0) {
+            SectionLabel(text: month)
 
+            AppCard {
                 HStack(spacing: 0) {
-                    SmallStat(label: "Trips",   value: "\(trips.count)",              color: AppTheme.textPrimary)
-                    Divider().frame(height: 32).background(AppTheme.oceanLight).padding(.horizontal, 10)
-                    SmallStat(label: "Charter", value: "\(charterTrips(trips))",       color: AppTheme.success)
-                    Divider().frame(height: 32).background(AppTheme.oceanLight).padding(.horizontal, 10)
-                    SmallStat(label: "Hours",   value: charterHoursFormatted(trips),  color: AppTheme.warning)
-                }
-
-                if !trips.isEmpty {
-                    serviceBar(trips: trips)
+                    BigStat(label: "Trips",   value: "\(trips.count)",          color: AppTheme.textPrimary)
+                    Divider().frame(height: 44).background(AppTheme.oceanLight).padding(.horizontal, 12)
+                    BigStat(label: "Charter", value: "\(charterTrips(trips))",  color: AppTheme.success)
+                    Divider().frame(height: 44).background(AppTheme.oceanLight).padding(.horizontal, 12)
+                    BigStat(label: "Days",    value: "\(uniqueDays(trips))",     color: AppTheme.info)
                 }
             }
+            .padding(.horizontal, AppTheme.screenPad)
+
+            AppCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Charter Hours").labelStyle()
+                    Text(charterHoursFormatted(trips))
+                        .font(.system(size: 36, weight: .black, design: .rounded))
+                        .foregroundColor(AppTheme.warning)
+                }
+            }
+            .padding(.horizontal, AppTheme.screenPad)
+            .padding(.top, AppTheme.cardSpacing)
+
+            if !trips.isEmpty {
+                SectionLabel(text: "By Service Type")
+                serviceBreakdown(trips: trips)
+                    .padding(.horizontal, AppTheme.screenPad)
+
+                SectionLabel(text: "By Vehicle")
+                vehicleBreakdown(trips: trips)
+                    .padding(.horizontal, AppTheme.screenPad)
+            }
+
+            Divider()
+                .background(AppTheme.oceanLight.opacity(0.4))
+                .padding(.horizontal, AppTheme.screenPad)
+                .padding(.top, AppTheme.cardSpacing)
         }
     }
 
@@ -248,26 +329,11 @@ struct StatsView: View {
         }
     }
 
-    // MARK: - Inline Service Bar (for period/month rows)
-
-    private func serviceBar(trips: [Trip]) -> some View {
-        GeometryReader { geo in
-            HStack(spacing: 2) {
-                ForEach(ServiceType.allCases) { service in
-                    let count = trips.filter { $0.service == service }.count
-                    if count > 0 {
-                        let fraction = CGFloat(count) / CGFloat(trips.count)
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(serviceColor(service))
-                            .frame(width: max(4, geo.size.width * fraction), height: 6)
-                    }
-                }
-            }
-        }
-        .frame(height: 6)
-    }
-
     // MARK: - Helpers
+
+    private func uniqueDays(_ trips: [Trip]) -> Int {
+        Set(trips.map { Calendar.current.startOfDay(for: $0.date) }).count
+    }
 
     private func charterTrips(_ trips: [Trip]) -> Int {
         trips.filter { $0.service == .charter }.count
@@ -332,22 +398,3 @@ private struct BigStat: View {
     }
 }
 
-private struct SmallStat: View {
-    let label: String
-    let value: String
-    let color: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label.uppercased())
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundColor(AppTheme.textTertiary)
-                .tracking(0.5)
-            Text(value)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(color)
-                .minimumScaleFactor(0.6)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}

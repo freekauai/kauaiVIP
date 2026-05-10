@@ -69,6 +69,29 @@ class TimesheetStore: ObservableObject {
         save()
     }
 
+    // MARK: - All-Trips CSV Export
+    var allTripsCsvString: String {
+        var rows = ["Period,Date,Vehicle,Service,Client,PU Time,DO Time,Left Base,Back Base,Notes"]
+        for period in periods {
+            for t in period.trips.sorted(by: { $0.date < $1.date }) {
+                let row = [
+                    "\"\(period.label)\"",
+                    t.formattedDate,
+                    t.vehicle.rawValue,
+                    t.service.rawValue,
+                    "\"\(t.clientName)\"",
+                    t.formattedPickup,
+                    t.formattedDropoff,
+                    t.formattedLeftBase,
+                    t.formattedBackBase,
+                    "\"\(t.notes)\""
+                ].joined(separator: ",")
+                rows.append(row)
+            }
+        }
+        return rows.joined(separator: "\n")
+    }
+
     // MARK: - Persistence
     private func save() {
         guard let data = try? JSONEncoder().encode(periods) else { return }

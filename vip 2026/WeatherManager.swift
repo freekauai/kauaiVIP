@@ -26,6 +26,18 @@ private struct OpenMeteoResponse: Decodable {
     let hourly:  OMHourly
 }
 
+private struct MarineResponse: Decodable {
+    let current: MarineCurrent
+}
+
+private struct MarineCurrent: Decodable {
+    let wave_height:        Double?
+    let wave_period:        Double?
+    let wave_direction:     Int?
+    let swell_wave_height:  Double?
+    let swell_wave_period:  Double?
+}
+
 private struct OMCurrent: Decodable {
     let temperature_2m:            Double
     let relative_humidity_2m:      Int
@@ -58,6 +70,13 @@ class WeatherManager: ObservableObject {
     @Published var precipChancePct: String = "--%"
     @Published var uvIndex:         String = "--"
     @Published var dewPointF:       String = "--°F"
+    @Published var moonPhaseEmoji:  String  = "🌑"
+    @Published var moonPhaseName:   String  = "New Moon"
+    @Published var waveHeightFt:    String  = "--ft"
+    @Published var wavePeriodSec:   String  = "--s"
+    @Published var waveDirection:   String  = "--"
+    @Published var swellHeightFt:   String  = "--ft"
+    @Published var swellPeriodSec:  String  = "--s"
     @Published var hourlyForecast:  [HourlyForecastItem] = []
     @Published var advisoryLines:   [String] = []
     @Published var isLoading:       Bool    = true
@@ -84,6 +103,7 @@ class WeatherManager: ObservableObject {
     func fetchWeather() async {
         isLoading  = true
         fetchError = nil
+        moonPhaseEmoji = computeMoonPhaseEmoji()
 
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         components.queryItems = [
@@ -112,20 +132,56 @@ class WeatherManager: ObservableObject {
             ].joined(separator: ",")),
         ]
 
-        guard let url = components.url else {
+        var marineComponents = URLComponents(string: "https://marine-api.open-meteo.com/v1/marine")!
+        marineComponents.queryItems = [
+            .init(name: "latitude",  value: "\(latitude)"),
+            .init(name: "longitude", value: "\(longitude)"),
+            .init(name: "current",   value: [
+                "wave_height", "wave_period", "wave_direction",
+                "swell_wave_height", "swell_wave_period"
+            ].joined(separator: ",")),
+        ]
+
+        guard let url = components.url, let marineURL = marineComponents.url else {
             fetchError = "Invalid weather URL"
             isLoading  = false
             return
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            async let weatherFetch = URLSession.shared.data(from: url)
+            async let marineFetch  = URLSession.shared.data(from: marineURL)
+
+            let (data, response) = try await weatherFetch
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 throw URLError(.badServerResponse)
             }
             let decoded = try JSONDecoder().decode(OpenMeteoResponse.self, from: data)
             applyCurrentWeather(decoded.current)
             applyHourlyForecast(decoded.hourly)
+
+            if let (marineData, marineResponse) = try? await marineFetch,
+               let marineHttp = marineResponse as? HTTPURLResponse,
+               marineHttp.statusCode == 200,
+               let marine = try? JSONDecoder().decode(MarineResponse.self, from: marineData) {
+                let c = marine.current
+                if let waveM = c.wave_height {
+                    waveHeightFt = "\(String(format: "%.1f", waveM * 3.28084))ft"
+                }
+                if let period = c.wave_period {
+                    wavePeriodSec = "\(Int(period.rounded()))s"
+                }
+                if let dir = c.wave_direction {
+                    waveDirection = compassAbbreviation(degrees: dir)
+                }
+                if let swellM = c.swell_wave_height {
+                    swellHeightFt = "\(String(format: "%.1f", swellM * 3.28084))ft"
+                }
+                if let swellP = c.swell_wave_period {
+                    swellPeriodSec = "\(Int(swellP.rounded()))s"
+                }
+            }
+
             lastUpdated = Date()
             isLoading   = false
         } catch {
@@ -230,6 +286,30 @@ class WeatherManager: ObservableObject {
         let dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
                     "S","SSW","SW","WSW","W","WNW","NW","NNW"]
         return dirs[Int((Double(degrees) / 22.5).rounded()) % 16]
+    }
+
+    // MARK: - Moon phase (synodic calculation, no API needed)
+    private func computeMoonPhaseEmoji() -> String {
+        // Reference new moon: Jan 6, 2000 18:14 UTC
+        let refNewMoon = Date(timeIntervalSince1970: 947182440)
+        let synodicDays = 29.53059
+        var phase = Date().timeIntervalSince(refNewMoon) / 86400
+        phase = phase.truncatingRemainder(dividingBy: synodicDays) / synodicDays
+        if phase < 0 { phase += 1 }
+        let (emoji, name): (String, String)
+        switch phase {
+        case 0..<0.0625:       (emoji, name) = ("🌑", "New Moon")
+        case 0.0625..<0.1875:  (emoji, name) = ("🌒", "Waxing Crescent")
+        case 0.1875..<0.3125:  (emoji, name) = ("🌓", "First Quarter")
+        case 0.3125..<0.4375:  (emoji, name) = ("🌔", "Waxing Gibbous")
+        case 0.4375..<0.5625:  (emoji, name) = ("🌕", "Full Moon")
+        case 0.5625..<0.6875:  (emoji, name) = ("🌖", "Waning Gibbous")
+        case 0.6875..<0.8125:  (emoji, name) = ("🌗", "Last Quarter")
+        case 0.8125..<0.9375:  (emoji, name) = ("🌘", "Waning Crescent")
+        default:               (emoji, name) = ("🌑", "New Moon")
+        }
+        moonPhaseName = name
+        return emoji
     }
 
     private func buildAdvisory(mph: Double, wmoCode: Int, uvVal: Int) -> [String] {
