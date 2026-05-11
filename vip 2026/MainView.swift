@@ -208,7 +208,7 @@ struct MainView: View {
                     sub: "Tap '+ New Pay Period' below to get started."
                 )
             } else {
-                ForEach(store.periods) { period in
+                ForEach(store.periods.reversed()) { period in
                     PeriodCard(period: period)
                         .onTapGesture { selectedPeriod = period }
                         .padding(.horizontal, AppTheme.screenPad)
