@@ -24,6 +24,12 @@ struct HourlyForecastItem: Identifiable {
 private struct OpenMeteoResponse: Decodable {
     let current: OMCurrent
     let hourly:  OMHourly
+    let daily:   OMDaily
+}
+
+private struct OMDaily: Decodable {
+    let sunrise: [String]
+    let sunset:  [String]
 }
 
 private struct MarineResponse: Decodable {
@@ -70,6 +76,8 @@ class WeatherManager: ObservableObject {
     @Published var precipChancePct: String = "--%"
     @Published var uvIndex:         String = "--"
     @Published var dewPointF:       String = "--°F"
+    @Published var sunriseTime:     Date?   = nil
+    @Published var sunsetTime:      Date?   = nil
     @Published var moonPhaseEmoji:  String  = "🌑"
     @Published var moonPhaseName:   String  = "New Moon"
     @Published var waveHeightFt:    String  = "--ft"
@@ -108,6 +116,8 @@ class WeatherManager: ObservableObject {
         waveDirection  = "--"
         swellHeightFt  = "--ft"
         swellPeriodSec = "--s"
+        sunriseTime    = nil
+        sunsetTime     = nil
         updateMoonPhase()
 
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
@@ -135,6 +145,7 @@ class WeatherManager: ObservableObject {
                 "weather_code",
                 "precipitation_probability"
             ].joined(separator: ",")),
+            .init(name: "daily",  value: "sunrise,sunset"),
         ]
 
         var marineComponents = URLComponents(string: "https://marine-api.open-meteo.com/v1/marine")!
@@ -164,6 +175,7 @@ class WeatherManager: ObservableObject {
             let decoded = try JSONDecoder().decode(OpenMeteoResponse.self, from: data)
             applyCurrentWeather(decoded.current)
             applyHourlyForecast(decoded.hourly)
+            applyDaily(decoded.daily)
 
             if let (marineData, marineResponse) = try? await marineFetch,
                let marineHttp = marineResponse as? HTTPURLResponse,
@@ -246,6 +258,15 @@ class WeatherManager: ObservableObject {
                 precipChance: h.precipitation_probability[i]
             )
         }
+    }
+
+    // MARK: - Apply daily (sunrise / sunset)
+    private func applyDaily(_ d: OMDaily) {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        fmt.timeZone   = TimeZone(identifier: "Pacific/Honolulu")
+        sunriseTime = d.sunrise.first.flatMap { fmt.date(from: $0) }
+        sunsetTime  = d.sunset.first.flatMap  { fmt.date(from: $0) }
     }
 
     // MARK: - WMO helpers

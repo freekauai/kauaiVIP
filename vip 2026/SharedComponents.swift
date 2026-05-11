@@ -34,41 +34,108 @@ struct AppHeader: View {
 
 // MARK: - Traffic / Bridge Status Banner
 struct TrafficBanner: View {
-    @EnvironmentObject var bridgeService: BridgeService
+    @EnvironmentObject var bridgeService:  BridgeService
+    @EnvironmentObject var weatherManager: WeatherManager
     @State private var showFAQ = false
+    @State private var now     = Date()
+
+    private let sunTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         let textColor: Color = bridgeService.level == .caution ? .black : .white
 
-        HStack(spacing: 8) {
-            Text(bridgeService.level.bannerIcon)
-            Text("Traffic: \(bridgeService.trafficLevel)")
-                .fontWeight(.semibold)
-            Circle().frame(width: 4, height: 4).opacity(0.5)
-            Text("Hanalei Bridge: \(bridgeService.bridgeStatus)")
-                .fontWeight(.semibold)
-            Spacer()
-            if bridgeService.waterLevelFt != "N/A" {
-                Text(bridgeService.waterLevelFt)
-                    .font(.system(size: 11))
-                    .opacity(0.75)
+        VStack(spacing: 0) {
+            // ── Sunrise / Sunset countdown row ────────────────────
+            HStack(spacing: 6) {
+                Text(sunEventIcon + " " + sunEventName)
+                    .fontWeight(.semibold)
+                Spacer()
+                Text(sunCountdown)
+                    .opacity(0.85)
             }
-            Button { showFAQ = true } label: {
-                Text("?")
-                    .font(.system(size: 11, weight: .bold))
-                    .frame(width: 20, height: 20)
-                    .background(textColor.opacity(0.18))
-                    .clipShape(Circle())
-                    .foregroundColor(textColor)
+            .font(.system(size: 12))
+            .foregroundColor(textColor)
+            .padding(.horizontal, AppTheme.screenPad)
+            .padding(.top, 7)
+            .padding(.bottom, 5)
+
+            Rectangle()
+                .fill(textColor.opacity(0.18))
+                .frame(height: 1)
+                .padding(.horizontal, AppTheme.screenPad)
+
+            // ── Traffic + Bridge row ──────────────────────────────
+            HStack(spacing: 8) {
+                Text(bridgeService.level.bannerIcon)
+                Text("Traffic: \(bridgeService.trafficLevel)")
+                    .fontWeight(.semibold)
+                Circle().frame(width: 4, height: 4).opacity(0.5)
+                Text("Hanalei Bridge: \(bridgeService.bridgeStatus)")
+                    .fontWeight(.semibold)
+                Spacer()
+                if bridgeService.waterLevelFt != "N/A" {
+                    Text(bridgeService.waterLevelFt)
+                        .font(.system(size: 11))
+                        .opacity(0.75)
+                }
+                Button { showFAQ = true } label: {
+                    Text("?")
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(width: 20, height: 20)
+                        .background(textColor.opacity(0.18))
+                        .clipShape(Circle())
+                        .foregroundColor(textColor)
+                }
             }
+            .font(.system(size: 13))
+            .foregroundColor(textColor)
+            .padding(.horizontal, AppTheme.screenPad)
+            .padding(.vertical, 8)
         }
-        .font(.system(size: 13))
-        .foregroundColor(textColor)
-        .padding(.horizontal, AppTheme.screenPad)
-        .padding(.vertical, 9)
         .background(bridgeService.level.statusColor)
         .animation(.easeInOut(duration: 0.3), value: bridgeService.level.rawValue)
+        .onReceive(sunTimer) { now = $0 }
         .sheet(isPresented: $showFAQ) { FAQView() }
+    }
+
+    // MARK: - Sun event helpers
+
+    /// Which event comes next and what emoji/name to show.
+    private var nextSunTarget: Date? {
+        guard let rise = weatherManager.sunriseTime,
+              let set  = weatherManager.sunsetTime else { return nil }
+        if now < rise { return rise }
+        if now < set  { return set }
+        // After sunset — approximate tomorrow's sunrise
+        return rise.addingTimeInterval(86_400)
+    }
+
+    private var sunEventIcon: String {
+        guard let rise = weatherManager.sunriseTime,
+              let set  = weatherManager.sunsetTime else { return "🌅" }
+        if now < rise { return "🌅" }   // before sunrise
+        if now < set  { return "🌇" }   // before sunset
+        return "🌅"                       // after sunset — next is sunrise
+    }
+
+    private var sunEventName: String {
+        guard let rise = weatherManager.sunriseTime,
+              let set  = weatherManager.sunsetTime else { return "Sunrise" }
+        if now < rise { return "Sunrise" }
+        if now < set  { return "Sunset" }
+        return "Tomorrow's Sunrise"
+    }
+
+    private var sunCountdown: String {
+        guard let target = nextSunTarget else { return "--" }
+        let secs = max(0, Int(target.timeIntervalSince(now)))
+        if secs == 0 { return "Now" }
+        let h = secs / 3600
+        let m = (secs % 3600) / 60
+        let s = secs % 60
+        if h > 0 { return "in \(h)h \(m)m" }
+        if m > 0 { return "in \(m)m \(s)s" }
+        return "in \(s)s"
     }
 }
 
