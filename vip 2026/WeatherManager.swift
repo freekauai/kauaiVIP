@@ -76,8 +76,9 @@ class WeatherManager: ObservableObject {
     @Published var precipChancePct: String = "--%"
     @Published var uvIndex:         String = "--"
     @Published var dewPointF:       String = "--°F"
-    @Published var sunriseTime:     Date?   = nil
-    @Published var sunsetTime:      Date?   = nil
+    @Published var sunriseTime:         Date?   = nil
+    @Published var sunsetTime:          Date?   = nil
+    @Published var tomorrowSunriseTime: Date?   = nil
     @Published var moonPhaseEmoji:  String  = "🌑"
     @Published var moonPhaseName:   String  = "New Moon"
     @Published var waveHeightFt:    String  = "--ft"
@@ -116,8 +117,9 @@ class WeatherManager: ObservableObject {
         waveDirection  = "--"
         swellHeightFt  = "--ft"
         swellPeriodSec = "--s"
-        sunriseTime    = nil
-        sunsetTime     = nil
+        sunriseTime         = nil
+        sunsetTime          = nil
+        tomorrowSunriseTime = nil
         updateMoonPhase()
 
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
@@ -128,7 +130,7 @@ class WeatherManager: ObservableObject {
             .init(name: "wind_speed_unit",    value: "mph"),
             .init(name: "precipitation_unit", value: "inch"),
             .init(name: "timezone",           value: "Pacific/Honolulu"),
-            .init(name: "forecast_days",      value: "1"),
+            .init(name: "forecast_days",      value: "2"),
             .init(name: "current",            value: [
                 "temperature_2m",
                 "relative_humidity_2m",
@@ -260,13 +262,14 @@ class WeatherManager: ObservableObject {
         }
     }
 
-    // MARK: - Apply daily (sunrise / sunset)
+    // MARK: - Apply daily (sunrise / sunset) — times are HST (Pacific/Honolulu)
     private func applyDaily(_ d: OMDaily) {
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
-        fmt.timeZone   = TimeZone(identifier: "Pacific/Honolulu")
-        sunriseTime = d.sunrise.first.flatMap { fmt.date(from: $0) }
-        sunsetTime  = d.sunset.first.flatMap  { fmt.date(from: $0) }
+        fmt.timeZone   = TimeZone(identifier: "Pacific/Honolulu") // HST, no DST
+        sunriseTime         = d.sunrise.first.flatMap      { fmt.date(from: $0) }
+        sunsetTime          = d.sunset.first.flatMap       { fmt.date(from: $0) }
+        tomorrowSunriseTime = d.sunrise.dropFirst().first.flatMap { fmt.date(from: $0) }
     }
 
     // MARK: - WMO helpers

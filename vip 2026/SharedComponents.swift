@@ -98,32 +98,31 @@ struct TrafficBanner: View {
         .sheet(isPresented: $showFAQ) { FAQView() }
     }
 
-    // MARK: - Sun event helpers
+    // MARK: - Sun event helpers (all times HST / Pacific/Honolulu)
 
-    /// Which event comes next and what emoji/name to show.
     private var nextSunTarget: Date? {
         guard let rise = weatherManager.sunriseTime,
               let set  = weatherManager.sunsetTime else { return nil }
         if now < rise { return rise }
         if now < set  { return set }
-        // After sunset — approximate tomorrow's sunrise
-        return rise.addingTimeInterval(86_400)
+        // After sunset — use real tomorrow sunrise if available, else +24h
+        return weatherManager.tomorrowSunriseTime ?? rise.addingTimeInterval(86_400)
     }
 
     private var sunEventIcon: String {
         guard let rise = weatherManager.sunriseTime,
               let set  = weatherManager.sunsetTime else { return "🌅" }
-        if now < rise { return "🌅" }   // before sunrise
-        if now < set  { return "🌇" }   // before sunset
-        return "🌅"                       // after sunset — next is sunrise
+        if now < rise { return "🌅" }
+        if now < set  { return "🌇" }
+        return "🌅"
     }
 
     private var sunEventName: String {
         guard let rise = weatherManager.sunriseTime,
-              let set  = weatherManager.sunsetTime else { return "Sunrise" }
-        if now < rise { return "Sunrise" }
-        if now < set  { return "Sunset" }
-        return "Tomorrow's Sunrise"
+              let set  = weatherManager.sunsetTime else { return "Sunrise · HST" }
+        if now < rise { return "Sunrise · HST" }
+        if now < set  { return "Sunset · HST" }
+        return "Tomorrow's Sunrise · HST"
     }
 
     private var sunCountdown: String {
