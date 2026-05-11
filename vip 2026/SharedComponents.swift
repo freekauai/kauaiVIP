@@ -4,6 +4,7 @@
 // ╚══════════════════════════════════════════════════════════════╝
 
 import SwiftUI
+import Combine
 
 // MARK: - App Header (consistent across all screens)
 struct AppHeader: View {
