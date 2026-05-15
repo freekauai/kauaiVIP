@@ -4,6 +4,7 @@
 // ╚══════════════════════════════════════════════════════════════╝
 
 import SwiftUI
+import Combine
 
 struct PeriodDetailView: View {
     let periodID: UUID
@@ -18,6 +19,9 @@ struct PeriodDetailView: View {
     @State private var editingTrip: Trip? = nil
     @State private var tripToDelete: Trip? = nil
     @State private var showDeleteAlert = false
+    @State private var now = Date()
+
+    private let tripTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     // Derive period from store so updates are live
     private var period: PayPeriod? {
@@ -86,6 +90,8 @@ struct PeriodDetailView: View {
                 }
             }
         }
+        .onReceive(tripTimer) { now = $0 }
+        .onDisappear { tripTimer.upstream.connect().cancel() }
         .sheet(isPresented: $showAddTrip) {
             TripFormView(periodID: periodID, existingTrip: nil)
         }
@@ -134,6 +140,32 @@ struct PeriodDetailView: View {
         .padding(.top, AppTheme.cardSpacing)
     }
 
+    // MARK: - Next-Up Trip ID
+    /// The ID of the soonest future trip that isn't currently active.
+    /// Prefers trips with an explicit future start time; falls back to
+    /// trips on today or a future date when no times are logged.
+    private var nextUpTripID: UUID? {
+        guard let period = period else { return nil }
+        let cal   = Calendar.current
+        let today = cal.startOfDay(for: now)
+        let candidates = period.trips.filter { !$0.isActive(at: now) }
+
+        // 1. Prefer explicit future start times
+        let timed = candidates.compactMap { trip -> (UUID, Date)? in
+            if trip.hasLeftBase, let lb = trip.timeLeftBase, lb > now { return (trip.id, lb) }
+            if trip.hasPUTime,   let pu = trip.pickupTime,  pu > now  { return (trip.id, pu) }
+            return nil
+        }
+        if let soonest = timed.min(by: { $0.1 < $1.1 }) { return soonest.0 }
+
+        // 2. Fall back: trips on today or a future date (no explicit time logged)
+        let byDate = candidates.compactMap { trip -> (UUID, Date)? in
+            let day = cal.startOfDay(for: trip.date)
+            return day >= today ? (trip.id, day) : nil
+        }
+        return byDate.min(by: { $0.1 < $1.1 })?.0
+    }
+
     // MARK: - Trips Section
     private func tripsSection(period: PayPeriod) -> some View {
         VStack(spacing: 0) {
@@ -146,9 +178,20 @@ struct PeriodDetailView: View {
                     sub: "Tap '+ Add Trip' below to log your first trip for this period."
                 )
             } else {
-                let sorted = period.trips.sorted { $0.date > $1.date }
+                let nextUp = nextUpTripID
+                let sorted = period.trips.sorted {
+                    let dayA = Calendar.current.startOfDay(for: $0.date)
+                    let dayB = Calendar.current.startOfDay(for: $1.date)
+                    if dayA != dayB { return dayA > dayB }
+                    // Within the same day, latest start time on top
+                    let timeA = $0.timeLeftBase ?? $0.pickupTime ?? $0.date
+                    let timeB = $1.timeLeftBase ?? $1.pickupTime ?? $1.date
+                    return timeA > timeB
+                }
                 ForEach(sorted) { trip in
                     TripCard(trip: trip,
+                             isActive: trip.isActive(at: now),
+                             isNextUp: trip.id == nextUp,
                              onEdit:   { editingTrip = trip },
                              onDelete: { tripToDelete = trip; showDeleteAlert = true })
                         .padding(.horizontal, AppTheme.screenPad)
@@ -198,8 +241,14 @@ private struct SummaryMetric: View {
 // MARK: - Trip Card
 struct TripCard: View {
     let trip:     Trip
+    var isActive: Bool = false
+    var isNextUp: Bool = false
     let onEdit:   () -> Void
     let onDelete: () -> Void
+
+    private var highlightColor: Color {
+        AppTheme.success
+    }
 
     var body: some View {
         AppCard(padding: 10) {
@@ -226,6 +275,15 @@ struct TripCard: View {
                         Text(trip.service.rawValue)
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(AppTheme.textPrimary)
+                        if isActive {
+                            Text("LIVE")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.black)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(AppTheme.success)
+                                .cornerRadius(4)
+                        }
                     }
                     // Client
                     Text(trip.clientName)
@@ -260,14 +318,23 @@ struct TripCard: View {
                             .font(.system(size: 14))
                             .foregroundColor(AppTheme.coral)
                     }
+                    .accessibilityLabel("Edit trip for \(trip.clientName)")
                     Button(action: onDelete) {
                         Image(systemName: "trash")
                             .font(.system(size: 14))
                             .foregroundColor(AppTheme.error)
                     }
+                    .accessibilityLabel("Delete trip for \(trip.clientName)")
                 }
             }
         }
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.cardRadius)
+                .stroke(highlightColor, lineWidth: (isActive || isNextUp) ? 1.5 : 0)
+        )
+        .shadow(color: (isActive || isNextUp) ? highlightColor.opacity(0.35) : .clear, radius: 8, x: 0, y: 0)
+        .animation(.easeInOut(duration: 0.4), value: isActive)
+        .animation(.easeInOut(duration: 0.4), value: isNextUp)
     }
 }
 

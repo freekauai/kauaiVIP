@@ -168,7 +168,7 @@ struct StatsView: View {
             if store.periods.isEmpty {
                 EmptyStateView(icon: "📋", message: "No Periods", sub: "Add a pay period to see stats.")
             } else {
-                ForEach(store.periods.reversed()) { period in
+                ForEach(store.periods) { period in
                     periodSection(period)
                 }
             }
@@ -377,7 +377,7 @@ struct StatsView: View {
             if groups[key] == nil {
                 groups[key] = (trip.date, [trip])
             } else {
-                groups[key]!.1.append(trip)
+                groups[key]?.1.append(trip)
             }
         }
         return groups

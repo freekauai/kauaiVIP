@@ -55,19 +55,30 @@ struct Trip: Identifiable, Codable {
 
     // MARK: Computed
 
-    /// Driver duty time for this trip.
-    /// Prefers Left Base → Back Base (total time away from base).
-    /// Falls back to Pickup → Dropoff if base times aren't set.
+    /// Driver duty time: earliest recorded time field → latest recorded time field.
     var charterDuration: TimeInterval? {
-        if hasLeftBase, hasBackBase, let lb = timeLeftBase, let bb = timeBackBase {
-            let interval = bb.timeIntervalSince(lb)
-            return interval > 0 ? interval : nil
-        }
-        if hasPUTime, hasDOTime, let pu = pickupTime, let doTime = dropoffTime {
-            let interval = doTime.timeIntervalSince(pu)
-            return interval > 0 ? interval : nil
-        }
-        return nil
+        let times: [Date] = [
+            hasPUTime   ? pickupTime   : nil,
+            hasDOTime   ? dropoffTime  : nil,
+            hasLeftBase ? timeLeftBase : nil,
+            hasBackBase ? timeBackBase : nil,
+        ].compactMap { $0 }
+        guard let earliest = times.min(),
+              let latest   = times.max(),
+              latest > earliest else { return nil }
+        return latest.timeIntervalSince(earliest)
+    }
+
+    /// True if `now` falls within this trip's active window (earliest → latest time field).
+    func isActive(at now: Date) -> Bool {
+        let times: [Date] = [
+            hasPUTime   ? pickupTime   : nil,
+            hasDOTime   ? dropoffTime  : nil,
+            hasLeftBase ? timeLeftBase : nil,
+            hasBackBase ? timeBackBase : nil,
+        ].compactMap { $0 }
+        guard let earliest = times.min(), let latest = times.max(), latest > earliest else { return false }
+        return now >= earliest && now <= latest
     }
 
     var formattedDate: String {

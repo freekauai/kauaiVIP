@@ -149,7 +149,10 @@ class BridgeService: ObservableObject {
         dateFmt.dateFormat = "yyyyMMdd"
         let today = dateFmt.string(from: Date())
 
-        var components = URLComponents(string: "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter")!
+        guard var components = URLComponents(string: "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter") else {
+            isLoading = false
+            return
+        }
         components.queryItems = [
             .init(name: "product",    value: "water_level"),
             .init(name: "station",    value: stationID),
@@ -175,13 +178,23 @@ class BridgeService: ObservableObject {
 
             let noaaResponse = try JSONDecoder().decode(NOAAResponse.self, from: data)
 
-            if let errMsg = noaaResponse.error?.message {
-                throw NSError(domain: "NOAA", code: 0, userInfo: [NSLocalizedDescriptionKey: errMsg])
+            // NOAA returns an error object when data is unavailable (e.g. outside measurement hours).
+            // Treat this as "no data" rather than a hard failure so the app degrades gracefully.
+            if noaaResponse.error != nil {
+                waterLevelFt = "Unavailable"
+                lastUpdated  = Date()
+                isLoading    = false
+                return
             }
 
-            guard let readings = noaaResponse.data, let latest = readings.last,
-                  let wl = Double(latest.v) else {
-                throw URLError(.cannotParseResponse)
+            guard let readings = noaaResponse.data,
+                  let latest   = readings.last(where: { !$0.v.trimmingCharacters(in: .whitespaces).isEmpty }),
+                  let wl       = Double(latest.v) else {
+                // Station has no recent readings — show a neutral state, not an error.
+                waterLevelFt = "Unavailable"
+                lastUpdated  = Date()
+                isLoading    = false
+                return
             }
 
             rawWaterFt   = wl
@@ -191,8 +204,9 @@ class BridgeService: ObservableObject {
             isLoading    = false
 
         } catch {
-            fetchError = "Bridge status unavailable: \(error.localizedDescription)"
-            isLoading  = false
+            // Network failure — degrade silently; don't surface a raw error string.
+            waterLevelFt = "Unavailable"
+            isLoading    = false
         }
     }
 

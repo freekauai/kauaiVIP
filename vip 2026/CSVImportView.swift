@@ -263,19 +263,37 @@ struct CSVImportView: View {
         return (trips, nil)
     }
 
+    /// RFC 4180-compliant CSV field splitter.
+    /// Handles `""` as an escaped literal quote inside a quoted field.
     private func splitCSVLine(_ line: String) -> [String] {
-        var fields:   [String] = []
-        var current   = ""
-        var inQuotes  = false
-        for ch in line {
+        var fields:  [String] = []
+        var current  = ""
+        var inQuotes = false
+        var idx      = line.startIndex
+
+        while idx < line.endIndex {
+            let ch = line[idx]
             if ch == "\"" {
-                inQuotes.toggle()
+                if inQuotes {
+                    let next = line.index(after: idx)
+                    if next < line.endIndex && line[next] == "\"" {
+                        // "" inside quoted field → single literal quote
+                        current.append("\"")
+                        idx = line.index(after: next)
+                        continue
+                    } else {
+                        inQuotes = false   // closing quote
+                    }
+                } else {
+                    inQuotes = true        // opening quote
+                }
             } else if ch == "," && !inQuotes {
                 fields.append(current.trimmingCharacters(in: .whitespaces))
                 current = ""
             } else {
                 current.append(ch)
             }
+            idx = line.index(after: idx)
         }
         fields.append(current.trimmingCharacters(in: .whitespaces))
         return fields
@@ -286,6 +304,11 @@ struct CSVImportView: View {
     private func doImport() {
         guard endDate >= startDate else {
             parseError = "End date must be on or after start date."
+            return
+        }
+        let dayCount = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+        guard (13...16).contains(dayCount) else {
+            parseError = "Pay periods should be 14–16 days (\(dayCount + 1) days selected). Adjust the start or end date."
             return
         }
         var period   = PayPeriod(startDate: startDate, endDate: endDate)

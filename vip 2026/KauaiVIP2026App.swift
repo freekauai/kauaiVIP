@@ -11,7 +11,6 @@
 // No special capabilities required.
 
 import SwiftUI
-import Combine
 
 @main
 struct KauaiVIP2026App: App {
@@ -25,7 +24,6 @@ struct KauaiVIP2026App: App {
                 .environmentObject(store)
                 .environmentObject(weatherManager)
                 .environmentObject(bridgeService)
-                .preferredColorScheme(.dark)
         }
     }
 }

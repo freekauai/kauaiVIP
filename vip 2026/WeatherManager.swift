@@ -91,8 +91,13 @@ class WeatherManager: ObservableObject {
     @Published var isLoading:       Bool    = true
     @Published var fetchError:      String? = nil
     @Published var lastUpdated:     Date?   = nil
+    /// Ticks every second — shared clock for any view that needs sub-minute precision
+    /// (e.g. TrafficBanner sunrise countdown). Centralises the 1-second timer so each
+    /// screen doesn't spin up its own.
+    @Published var clockNow:        Date    = Date()
 
     private var refreshTimer: Timer?
+    private var clockTimer:   AnyCancellable?
     private let latitude  = 21.9758
     private let longitude = -159.3753
 
@@ -104,9 +109,15 @@ class WeatherManager: ObservableObject {
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { await self?.fetchWeather() }
         }
+        clockTimer = Timer.publish(every: 1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] tick in self?.clockNow = tick }
     }
 
-    deinit { refreshTimer?.invalidate() }
+    deinit {
+        refreshTimer?.invalidate()
+        clockTimer?.cancel()
+    }
 
     // MARK: - Fetch
     func fetchWeather() async {
@@ -122,7 +133,11 @@ class WeatherManager: ObservableObject {
         tomorrowSunriseTime = nil
         updateMoonPhase()
 
-        var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
+        guard var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast") else {
+            fetchError = "Invalid weather URL"
+            isLoading  = false
+            return
+        }
         components.queryItems = [
             .init(name: "latitude",           value: "\(latitude)"),
             .init(name: "longitude",          value: "\(longitude)"),
@@ -150,7 +165,11 @@ class WeatherManager: ObservableObject {
             .init(name: "daily",  value: "sunrise,sunset"),
         ]
 
-        var marineComponents = URLComponents(string: "https://marine-api.open-meteo.com/v1/marine")!
+        guard var marineComponents = URLComponents(string: "https://marine-api.open-meteo.com/v1/marine") else {
+            fetchError = "Invalid marine URL"
+            isLoading  = false
+            return
+        }
         marineComponents.queryItems = [
             .init(name: "latitude",  value: "\(latitude)"),
             .init(name: "longitude", value: "\(longitude)"),

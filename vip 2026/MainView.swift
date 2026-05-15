@@ -63,10 +63,15 @@ struct MainView: View {
             }
             .navigationBarHidden(true)
             .onAppear {
-                if !didAutoNavigate, let latest = store.periods.first {
-                    didAutoNavigate = true
-                    selectedPeriod = latest
-                }
+                guard !didAutoNavigate, let newest = store.periods.first else { return }
+                didAutoNavigate = true
+                selectedPeriod = newest
+            }
+            .onChange(of: store.periods) { _, periods in
+                // Handles the case where the store finishes loading after onAppear fires
+                guard !didAutoNavigate, let newest = periods.first else { return }
+                didAutoNavigate = true
+                selectedPeriod = newest
             }
             .navigationDestination(item: $selectedPeriod) { period in
                 PeriodDetailView(periodID: period.id, activeModal: $activeModal)
@@ -208,7 +213,7 @@ struct MainView: View {
                     sub: "Tap '+ New Pay Period' below to get started."
                 )
             } else {
-                ForEach(store.periods.reversed()) { period in
+                ForEach(store.periods) { period in
                     PeriodCard(period: period)
                         .onTapGesture { selectedPeriod = period }
                         .padding(.horizontal, AppTheme.screenPad)

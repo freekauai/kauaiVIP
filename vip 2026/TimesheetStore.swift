@@ -6,9 +6,11 @@
 import Foundation
 import Combine
 
+@MainActor
 class TimesheetStore: ObservableObject {
-    @Published var periods:    [PayPeriod] = []
-    @Published var driverName: String      = ""
+    @Published var periods:       [PayPeriod] = []
+    @Published var driverName:    String      = ""
+    @Published var lastSaveError: String?     = nil
 
     // Legacy UserDefaults keys — used only for one-time migration
     private let legacyPeriodsKey    = "kauai_vip_2026_periods"
@@ -32,9 +34,15 @@ class TimesheetStore: ObservableObject {
         UserDefaults.standard.set(name, forKey: driverNameKey)
     }
 
+    // MARK: - Sorting (newest startDate first)
+    private func sortPeriods() {
+        periods.sort { $0.startDate > $1.startDate }
+    }
+
     // MARK: - Period CRUD
     func addPeriod(_ period: PayPeriod) {
-        periods.insert(period, at: 0)
+        periods.append(period)
+        sortPeriods()
         save()
     }
 
@@ -46,6 +54,7 @@ class TimesheetStore: ObservableObject {
     func updatePeriod(_ period: PayPeriod) {
         guard let idx = periods.firstIndex(where: { $0.id == period.id }) else { return }
         periods[idx] = period
+        sortPeriods()
         save()
     }
 
@@ -94,8 +103,14 @@ class TimesheetStore: ObservableObject {
 
     // MARK: - Persistence
     private func save() {
-        guard let data = try? JSONEncoder().encode(periods) else { return }
-        try? data.write(to: periodsFileURL, options: .atomic)
+        do {
+            let data = try JSONEncoder().encode(periods)
+            try data.write(to: periodsFileURL, options: .atomic)
+            lastSaveError = nil
+        } catch {
+            lastSaveError = error.localizedDescription
+            print("⚠️ KauaiVIP: Failed to save periods: \(error)")
+        }
     }
 
     private func load() {
@@ -111,6 +126,9 @@ class TimesheetStore: ObservableObject {
             save()  // write to Documents so future reads use the new location
             UserDefaults.standard.removeObject(forKey: legacyPeriodsKey)
         }
+
+        // Always ensure newest period is first regardless of on-disk order
+        sortPeriods()
 
         driverName = UserDefaults.standard.string(forKey: driverNameKey) ?? ""
     }

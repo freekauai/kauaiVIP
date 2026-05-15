@@ -4,43 +4,14 @@
 // ╚══════════════════════════════════════════════════════════════╝
 
 import SwiftUI
-import Combine
-
-// MARK: - App Header (consistent across all screens)
-struct AppHeader: View {
-    @EnvironmentObject var store: TimesheetStore
-    var subtitle: String? = nil   // e.g. period label on detail screen
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Text("🏝️ KAUAI VIP 2026")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(AppTheme.textTertiary)
-                .tracking(2)
-            Text(store.driverName)
-                .font(.system(size: 22, weight: .black, design: .rounded))
-                .foregroundColor(AppTheme.textPrimary)
-            if let sub = subtitle {
-                Text(sub)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(AppTheme.coral)
-                    .tracking(0.5)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(AppTheme.oceanDeep)
-    }
-}
 
 // MARK: - Traffic / Bridge Status Banner
 struct TrafficBanner: View {
     @EnvironmentObject var bridgeService:  BridgeService
     @EnvironmentObject var weatherManager: WeatherManager
     @State private var showFAQ = false
-    @State private var now     = Date()
 
-    private let sunTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    private var now: Date { weatherManager.clockNow }
 
     var body: some View {
         let textColor: Color = bridgeService.level == .caution ? .black : .white
@@ -49,12 +20,12 @@ struct TrafficBanner: View {
             // ── Sunrise / Sunset countdown row ────────────────────
             HStack(spacing: 6) {
                 Text(sunEventIcon + " " + sunEventName)
-                    .fontWeight(.semibold)
+                    .fontWeight(.bold)
                 Spacer()
                 Text(sunCountdown)
-                    .opacity(0.85)
+                    .fontWeight(.bold)
             }
-            .font(.system(size: 12))
+            .font(.system(size: 15))
             .foregroundColor(textColor)
             .padding(.horizontal, AppTheme.screenPad)
             .padding(.top, 7)
@@ -74,7 +45,7 @@ struct TrafficBanner: View {
                 Text("Hanalei Bridge: \(bridgeService.bridgeStatus)")
                     .fontWeight(.semibold)
                 Spacer()
-                if bridgeService.waterLevelFt != "N/A" {
+                if bridgeService.rawWaterFt != nil {
                     Text(bridgeService.waterLevelFt)
                         .font(.system(size: 11))
                         .opacity(0.75)
@@ -95,7 +66,6 @@ struct TrafficBanner: View {
         }
         .background(bridgeService.level.statusColor)
         .animation(.easeInOut(duration: 0.3), value: bridgeService.level.rawValue)
-        .onReceive(sunTimer) { now = $0 }
         .sheet(isPresented: $showFAQ) { FAQView() }
     }
 
@@ -575,6 +545,13 @@ func shareFile(data: Data, filename: String) {
        let root  = scene.keyWindow?.rootViewController {
         var top = root
         while let presented = top.presentedViewController { top = presented }
+        // Required on iPad — without a source view the popover has no anchor and crashes.
+        if let popover = vc.popoverPresentationController {
+            popover.sourceView = top.view
+            popover.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY,
+                                        width: 0, height: 0)
+            popover.permittedArrowDirections = []
+        }
         top.present(vc, animated: true)
     }
 }
@@ -654,53 +631,59 @@ struct FAQView: View {
                                         Text("Joey Wray")
                                             .font(.system(size: 18, weight: .bold))
                                             .foregroundColor(AppTheme.textPrimary)
-                                        Link("joeywray.com", destination: URL(string: "https://joeywray.com")!)
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundColor(AppTheme.coral)
-                                    }
-                                }
-
-                                Divider().background(AppTheme.oceanLight)
-
-                                Link(destination: URL(string: "mailto:Joey@joeywray.com?subject=Kauai%20VIP%202026%20Feedback")!) {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "envelope.fill")
-                                            .font(.system(size: 18))
-                                            .foregroundColor(AppTheme.coral)
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text("Questions or Suggestions?")
+                                        if let url = URL(string: "https://joeywray.com") {
+                                            Link("joeywray.com", destination: url)
                                                 .font(.system(size: 14, weight: .semibold))
-                                                .foregroundColor(AppTheme.textPrimary)
-                                            Text("Joey@joeywray.com")
-                                                .font(.system(size: 13))
                                                 .foregroundColor(AppTheme.coral)
                                         }
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundColor(AppTheme.textTertiary)
                                     }
                                 }
 
                                 Divider().background(AppTheme.oceanLight)
 
-                                Link(destination: URL(string: "https://venmo.com/u/Joey-Wray-1")!) {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "heart.fill")
-                                            .font(.system(size: 18))
-                                            .foregroundColor(AppTheme.success)
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text("Donate")
-                                                .font(.system(size: 14, weight: .semibold))
-                                                .foregroundColor(AppTheme.textPrimary)
-                                            Text("venmo.com/u/Joey-Wray-1")
-                                                .font(.system(size: 13))
-                                                .foregroundColor(AppTheme.success)
+                                if let mailURL = URL(string: "mailto:Joey@joeywray.com?subject=Kauai%20VIP%202026%20Feedback") {
+                                    Link(destination: mailURL) {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: "envelope.fill")
+                                                .font(.system(size: 18))
+                                                .foregroundColor(AppTheme.coral)
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Text("Questions or Suggestions?")
+                                                    .font(.system(size: 14, weight: .semibold))
+                                                    .foregroundColor(AppTheme.textPrimary)
+                                                Text("Joey@joeywray.com")
+                                                    .font(.system(size: 13))
+                                                    .foregroundColor(AppTheme.coral)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundColor(AppTheme.textTertiary)
                                         }
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundColor(AppTheme.textTertiary)
+                                    }
+                                }
+
+                                Divider().background(AppTheme.oceanLight)
+
+                                if let venmoURL = URL(string: "https://venmo.com/u/Joey-Wray-1") {
+                                    Link(destination: venmoURL) {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: "heart.fill")
+                                                .font(.system(size: 18))
+                                                .foregroundColor(AppTheme.success)
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Text("Donate")
+                                                    .font(.system(size: 14, weight: .semibold))
+                                                    .foregroundColor(AppTheme.textPrimary)
+                                                Text("venmo.com/u/Joey-Wray-1")
+                                                    .font(.system(size: 13))
+                                                    .foregroundColor(AppTheme.success)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundColor(AppTheme.textTertiary)
+                                        }
                                     }
                                 }
                             }
