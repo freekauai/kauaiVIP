@@ -40,12 +40,21 @@ struct TripFormView: View {
     private var isEditing: Bool { existingTrip != nil }
     private var navTitle:  String { isEditing ? "Edit Trip" : "Add Trip" }
 
+    // Pick lists from the store, guaranteeing the trip's current value is shown
+    // even if it was a custom entry that has since been deleted in Settings.
+    private var vehicleOptions: [Vehicle] {
+        store.allVehicles.contains(vehicle) ? store.allVehicles : store.allVehicles + [vehicle]
+    }
+    private var serviceOptions: [ServiceType] {
+        store.allServices.contains(service) ? store.allServices : store.allServices + [service]
+    }
+
     // MARK: - Picker helpers (extracted to avoid type-checker timeout)
     private var vehiclePicker: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Vehicle").font(.system(size: 12)).foregroundColor(AppTheme.textTertiary)
             Picker("Vehicle", selection: $vehicle) {
-                ForEach(Vehicle.allCases) { v in
+                ForEach(vehicleOptions) { v in
                     Text("\(v.icon) \(v.rawValue)").tag(v)
                 }
             }
@@ -63,7 +72,7 @@ struct TripFormView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Service").font(.system(size: 12)).foregroundColor(AppTheme.textTertiary)
             Picker("Service", selection: $service) {
-                ForEach(ServiceType.allCases) { s in
+                ForEach(serviceOptions) { s in
                     Text("\(s.icon) \(s.rawValue)").tag(s)
                 }
             }

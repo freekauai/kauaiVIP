@@ -300,7 +300,7 @@ struct StatsView: View {
     private func serviceBreakdown(trips: [Trip]) -> some View {
         AppCard {
             VStack(spacing: 10) {
-                ForEach(ServiceType.allCases) { service in
+                ForEach(servicesPresent(in: trips)) { service in
                     let count = trips.filter { $0.service == service }.count
                     if count > 0 {
                         let pct = trips.isEmpty ? 0 : Int((Double(count) / Double(trips.count) * 100).rounded())
@@ -340,7 +340,7 @@ struct StatsView: View {
     private func vehicleBreakdown(trips: [Trip]) -> some View {
         AppCard {
             VStack(spacing: 10) {
-                ForEach(Vehicle.allCases) { vehicle in
+                ForEach(vehiclesPresent(in: trips)) { vehicle in
                     let count = trips.filter { $0.vehicle == vehicle }.count
                     if count > 0 {
                         let pct = trips.isEmpty ? 0 : Int((Double(count) / Double(trips.count) * 100).rounded())
@@ -417,10 +417,23 @@ struct StatsView: View {
     }
 
     private func serviceColor(_ service: ServiceType) -> Color {
-        switch service {
-        case .airport: return AppTheme.info
-        case .charter: return AppTheme.success
-        }
+        if service == .charter { return AppTheme.success }
+        if service == .airport { return AppTheme.info }
+        return AppTheme.coral   // custom services
+    }
+
+    /// Distinct services appearing in `trips`, built-ins first (in canonical
+    /// order), then any custom services in first-appearance order.
+    private func servicesPresent(in trips: [Trip]) -> [ServiceType] {
+        var ordered: [ServiceType] = ServiceType.builtIns.filter { s in trips.contains { $0.service == s } }
+        for t in trips where !ordered.contains(t.service) { ordered.append(t.service) }
+        return ordered
+    }
+
+    private func vehiclesPresent(in trips: [Trip]) -> [Vehicle] {
+        var ordered: [Vehicle] = Vehicle.builtIns.filter { v in trips.contains { $0.vehicle == v } }
+        for t in trips where !ordered.contains(t.vehicle) { ordered.append(t.vehicle) }
+        return ordered
     }
 
     // MARK: - Insight cards

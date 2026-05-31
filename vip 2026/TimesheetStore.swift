@@ -13,6 +13,15 @@ class TimesheetStore: ObservableObject {
     @Published var companyName:   String      = ""
     @Published var lastSaveError: String?     = nil
 
+    /// User-added vehicles / services, appended after the built-ins.
+    @Published var customVehicles: [Vehicle]     = []
+    @Published var customServices: [ServiceType] = []
+
+    /// Full pick lists used by the trip form and breakdowns:
+    /// built-ins first, then the driver's custom additions.
+    var allVehicles: [Vehicle]     { Vehicle.builtIns + customVehicles }
+    var allServices: [ServiceType] { ServiceType.builtIns + customServices }
+
     /// Label shown on screen and in PDF exports: the company name when set,
     /// otherwise the driver's name.
     var displayName: String {
@@ -23,6 +32,8 @@ class TimesheetStore: ObservableObject {
     private let legacyPeriodsKey    = "kauai_vip_2026_periods"
     private let driverNameKey       = "kauai_vip_2026_driver_name"
     private let companyNameKey      = "kauai_vip_2026_company_name"
+    private let customVehiclesKey   = "kauai_vip_2026_custom_vehicles"
+    private let customServicesKey   = "kauai_vip_2026_custom_services"
 
     // Documents-directory file URL — survives reinstall via iCloud/iTunes backup
     private var periodsFileURL: URL {
@@ -45,6 +56,39 @@ class TimesheetStore: ObservableObject {
     func saveCompanyName(_ name: String) {
         companyName = name.trimmingCharacters(in: .whitespaces)
         UserDefaults.standard.set(companyName, forKey: companyNameKey)
+    }
+
+    // MARK: - Custom Vehicles / Services
+    /// Adds a custom vehicle. No-ops on blank input or a case-insensitive
+    /// duplicate of any built-in or existing custom vehicle.
+    func addCustomVehicle(_ rawName: String) {
+        let name = rawName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty,
+              !allVehicles.contains(where: { $0.rawValue.caseInsensitiveCompare(name) == .orderedSame })
+        else { return }
+        customVehicles.append(Vehicle(rawValue: name))
+        UserDefaults.standard.set(customVehicles.map(\.rawValue), forKey: customVehiclesKey)
+    }
+
+    /// Removes a custom vehicle. Built-ins are never in `customVehicles`, so they
+    /// are inherently safe. Existing trips keep their stored vehicle either way.
+    func removeCustomVehicle(_ vehicle: Vehicle) {
+        customVehicles.removeAll { $0 == vehicle }
+        UserDefaults.standard.set(customVehicles.map(\.rawValue), forKey: customVehiclesKey)
+    }
+
+    func addCustomService(_ rawName: String) {
+        let name = rawName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty,
+              !allServices.contains(where: { $0.rawValue.caseInsensitiveCompare(name) == .orderedSame })
+        else { return }
+        customServices.append(ServiceType(rawValue: name))
+        UserDefaults.standard.set(customServices.map(\.rawValue), forKey: customServicesKey)
+    }
+
+    func removeCustomService(_ service: ServiceType) {
+        customServices.removeAll { $0 == service }
+        UserDefaults.standard.set(customServices.map(\.rawValue), forKey: customServicesKey)
     }
 
     // MARK: - Sorting (newest startDate first)
@@ -151,6 +195,31 @@ class TimesheetStore: ObservableObject {
 
         driverName  = UserDefaults.standard.string(forKey: driverNameKey)  ?? ""
         companyName = UserDefaults.standard.string(forKey: companyNameKey) ?? ""
+
+        customVehicles = Self.sanitize(
+            UserDefaults.standard.array(forKey: customVehiclesKey) as? [String] ?? [],
+            against: Vehicle.builtIns.map(\.rawValue)
+        ).map { Vehicle(rawValue: $0) }
+        customServices = Self.sanitize(
+            UserDefaults.standard.array(forKey: customServicesKey) as? [String] ?? [],
+            against: ServiceType.builtIns.map(\.rawValue)
+        ).map { ServiceType(rawValue: $0) }
+    }
+
+    /// Drops blanks, built-in collisions, and case-insensitive duplicates from a
+    /// persisted custom list, so the merged `allVehicles`/`allServices` can never
+    /// produce duplicate `Identifiable` IDs (which break SwiftUI `ForEach`).
+    private static func sanitize(_ names: [String], against builtIns: [String]) -> [String] {
+        var seen = Set(builtIns.map { $0.lowercased() })
+        var result: [String] = []
+        for raw in names {
+            let name = raw.trimmingCharacters(in: .whitespaces)
+            let key  = name.lowercased()
+            guard !name.isEmpty, !seen.contains(key) else { continue }
+            seen.insert(key)
+            result.append(name)
+        }
+        return result
     }
 
 }

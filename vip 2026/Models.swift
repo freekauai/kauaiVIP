@@ -7,31 +7,77 @@ import Foundation
 import UIKit
 
 // MARK: - Vehicle
-enum Vehicle: String, CaseIterable, Codable, Identifiable {
-    case suv       = "SUV"
-    case sprinterA = "Sprinter A"
-    case sprinterB = "Sprinter B"
-    var id: String { rawValue }
+/// String-backed (not an enum) so drivers can add their own vehicles in Settings.
+/// Encodes as a bare string — its name — so it is byte-compatible with trips
+/// saved when this was a plain `enum Vehicle: String` (e.g. "SUV").
+struct Vehicle: Hashable, Identifiable, RawRepresentable, Codable {
+    let rawValue: String
+    init(rawValue: String) { self.rawValue = rawValue }
+    init(_ rawValue: String) { self.rawValue = rawValue }
+
+    var id:   String { rawValue }
+    var name: String { rawValue }
+
+    /// Built-ins keep their emoji; user-added vehicles fall back to a generic car.
     var icon: String {
-        switch self {
-        case .suv:       return "🚙"
-        case .sprinterA: return "🚐"
-        case .sprinterB: return "🚐"
+        switch rawValue {
+        case "SUV":                      return "🚙"
+        case "Sprinter A", "Sprinter B": return "🚐"
+        default:                         return "🚗"
         }
+    }
+
+    // Encode/decode as a single string so the on-disk shape matches the old enum.
+    init(from decoder: Decoder) throws {
+        rawValue = try decoder.singleValueContainer().decode(String.self)
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(rawValue)
     }
 }
 
+extension Vehicle {
+    static let suv       = Vehicle(rawValue: "SUV")
+    static let sprinterA = Vehicle(rawValue: "Sprinter A")
+    static let sprinterB = Vehicle(rawValue: "Sprinter B")
+    /// The vehicles that ship with the app — always listed first, never deletable.
+    static let builtIns: [Vehicle] = [.suv, .sprinterA, .sprinterB]
+}
+
 // MARK: - ServiceType
-enum ServiceType: String, CaseIterable, Codable, Identifiable {
-    case airport = "Airport"
-    case charter = "Charter"
-    var id: String { rawValue }
+/// String-backed for the same reason as `Vehicle`. The `.charter` constant is
+/// load-bearing: charter-hours totals key off `service == .charter`.
+struct ServiceType: Hashable, Identifiable, RawRepresentable, Codable {
+    let rawValue: String
+    init(rawValue: String) { self.rawValue = rawValue }
+    init(_ rawValue: String) { self.rawValue = rawValue }
+
+    var id:   String { rawValue }
+    var name: String { rawValue }
+
     var icon: String {
-        switch self {
-        case .airport: return "✈️"
-        case .charter: return "🏝️"
+        switch rawValue {
+        case "Airport": return "✈️"
+        case "Charter": return "🏝️"
+        default:        return "📋"
         }
     }
+
+    init(from decoder: Decoder) throws {
+        rawValue = try decoder.singleValueContainer().decode(String.self)
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(rawValue)
+    }
+}
+
+extension ServiceType {
+    static let airport = ServiceType(rawValue: "Airport")
+    static let charter = ServiceType(rawValue: "Charter")
+    /// The services that ship with the app — always listed first, never deletable.
+    static let builtIns: [ServiceType] = [.airport, .charter]
 }
 
 // MARK: - Trip
@@ -446,8 +492,24 @@ struct TripStats {
         for t in trips { wk[(cal.component(.weekday, from: t.date) - 1) % 7] += 1 }
         weekdayCounts = wk
 
-        serviceCounts = ServiceType.allCases.map { s in (s, trips.filter { $0.service == s }.count) }
-        vehicleCounts = Vehicle.allCases.map     { v in (v, trips.filter { $0.vehicle == v }.count) }
+        serviceCounts = Self.tally(trips.map(\.service), builtInsFirst: ServiceType.builtIns)
+        vehicleCounts = Self.tally(trips.map(\.vehicle), builtInsFirst: Vehicle.builtIns)
+    }
+
+    /// Counts occurrences of each value, listing the built-ins (in their canonical
+    /// order) before any custom values, which follow in first-appearance order.
+    private static func tally<T: Hashable>(_ values: [T], builtInsFirst order: [T]) -> [(T, Int)] {
+        var counts: [T: Int] = [:]
+        for v in values { counts[v, default: 0] += 1 }
+        var result: [(T, Int)] = []
+        var seen = Set<T>()
+        for o in order where counts[o] != nil {
+            result.append((o, counts[o]!)); seen.insert(o)
+        }
+        for v in values where !seen.contains(v) {
+            result.append((v, counts[v]!)); seen.insert(v)
+        }
+        return result
     }
 
     var avgTripsPerDay:   Double { uniqueDays > 0 ? Double(total) / Double(uniqueDays) : 0 }

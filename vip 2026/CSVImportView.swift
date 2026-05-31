@@ -254,12 +254,15 @@ struct CSVImportView: View {
             let bbStr      = cols[6]
             let notesStr   = cols.count > 7 ? cols[7] : ""
 
-            let vehicle = Vehicle.allCases.first {
+            // Match built-ins case-insensitively (so "charter" canonicalizes to
+            // "Charter" and keeps its charter-hours semantics); otherwise import
+            // the name verbatim as a custom vehicle/service.
+            let vehicle = Vehicle.builtIns.first {
                 $0.rawValue.lowercased() == vehicleStr.lowercased()
-            } ?? .suv
-            let service = ServiceType.allCases.first {
+            } ?? (vehicleStr.isEmpty ? .suv : Vehicle(rawValue: vehicleStr))
+            let service = ServiceType.builtIns.first {
                 $0.rawValue.lowercased() == serviceStr.lowercased()
-            } ?? .airport
+            } ?? (serviceStr.isEmpty ? .airport : ServiceType(rawValue: serviceStr))
 
             func parseTime(_ s: String) -> Date? {
                 guard s != "--", !s.isEmpty else { return nil }
@@ -351,6 +354,13 @@ struct CSVImportView: View {
         }
         var period   = PayPeriod(startDate: startDate, endDate: endDate)
         period.trips = parsedTrips
+        // Register any custom vehicles/services the import introduced, so they
+        // appear in the Add-Trip picker and Settings rather than being orphaned
+        // on imported trips. addCustom* de-dupes built-ins and existing entries.
+        for trip in parsedTrips {
+            store.addCustomVehicle(trip.vehicle.rawValue)
+            store.addCustomService(trip.service.rawValue)
+        }
         store.addPeriod(period)
         dismiss()
     }
