@@ -115,7 +115,8 @@ class BridgeService: ObservableObject {
     // MARK: Gauge helpers (consumed by views)
     var gaugePct: Double {
         guard let raw = rawWaterFt else { return 0 }
-        return min(raw / BridgeService.gaugeFt, 1.0)
+        // Clamp to 0…1 — NOAA can report negative levels (tide below datum).
+        return max(0, min(raw / BridgeService.gaugeFt, 1.0))
     }
     var gaugeColor: Color {
         guard let raw = rawWaterFt else { return AppTheme.success }
@@ -140,10 +141,20 @@ class BridgeService: ObservableObject {
 
     deinit { refreshTimer?.invalidate() }
 
-    // MARK: - Fetch
+    // MARK: - Fetch (public entry point)
     func fetchBridgeStatus() async {
-        isLoading  = true
-        fetchError = nil
+        await fetchWithRetry(attempt: 0)
+    }
+
+    // MARK: - Fetch with exponential back-off (max 3 retries)
+    /// Retries on both network errors and NOAA API error payloads.
+    /// Delays: 1 s → 2 s → 4 s before giving up.
+    private func fetchWithRetry(attempt: Int) async {
+        // Only reset loading/error on the first attempt
+        if attempt == 0 {
+            isLoading  = true
+            fetchError = nil
+        }
 
         let dateFmt = DateFormatter()
         dateFmt.dateFormat = "yyyyMMdd"
@@ -178,12 +189,18 @@ class BridgeService: ObservableObject {
 
             let noaaResponse = try JSONDecoder().decode(NOAAResponse.self, from: data)
 
-            // NOAA returns an error object when data is unavailable (e.g. outside measurement hours).
-            // Treat this as "no data" rather than a hard failure so the app degrades gracefully.
+            // NOAA returns an error object when data is unavailable.
+            // Retry with back-off before giving up.
             if noaaResponse.error != nil {
-                waterLevelFt = "Unavailable"
-                lastUpdated  = Date()
-                isLoading    = false
+                if attempt < 3 {
+                    let delaySec = pow(2.0, Double(attempt))   // 1 s, 2 s, 4 s
+                    try? await Task.sleep(nanoseconds: UInt64(delaySec * 1_000_000_000))
+                    await fetchWithRetry(attempt: attempt + 1)
+                } else {
+                    waterLevelFt = "Unavailable"
+                    lastUpdated  = Date()
+                    isLoading    = false
+                }
                 return
             }
 
@@ -204,9 +221,15 @@ class BridgeService: ObservableObject {
             isLoading    = false
 
         } catch {
-            // Network failure — degrade silently; don't surface a raw error string.
-            waterLevelFt = "Unavailable"
-            isLoading    = false
+            // Network / decode failure — retry with back-off.
+            if attempt < 3 {
+                let delaySec = pow(2.0, Double(attempt))
+                try? await Task.sleep(nanoseconds: UInt64(delaySec * 1_000_000_000))
+                await fetchWithRetry(attempt: attempt + 1)
+            } else {
+                waterLevelFt = "Unavailable"
+                isLoading    = false
+            }
         }
     }
 

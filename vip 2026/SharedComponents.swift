@@ -118,7 +118,7 @@ struct TopActionButtons: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            TopButton(icon: "sun.max.fill",         label: "WEATHER",   color: Color(hex: "FDB813"), action: onWeather)
+            TopButton(icon: "sun.max.fill",         label: "WEATHER",   color: AppTheme.warning, action: onWeather)
             TopButton(icon: "map.fill",              label: "APPLE MAP", color: AppTheme.info,        action: onMap)
             TopButton(icon: "light.beacon.max.fill", label: "TRAFFIC",   color: AppTheme.coral,       action: onTraffic)
             TopButton(icon: "chart.bar.fill",        label: "STATS",     color: AppTheme.success,     action: onStats)
@@ -234,6 +234,8 @@ extension View {
 }
 
 // MARK: - App Card (elevated surface)
+/// Canonical card container. Wraps content in the standard card surface defined
+/// by AppCardModifier (Theme.swift). All card styling flows from that single source.
 struct AppCard<Content: View>: View {
     let content: Content
     var padding: CGFloat = 14
@@ -247,9 +249,7 @@ struct AppCard<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppTheme.oceanMedium)
-            .cornerRadius(AppTheme.cardRadius)
-            .shadow(color: .black.opacity(0.25), radius: 6, x: 0, y: 3)
+            .modifier(AppCardModifier())
     }
 }
 
@@ -423,57 +423,73 @@ struct FiveMinutePicker: View {
     private let minutes = stride(from: 0, through: 55, by: 5).map { $0 }
     private let periods = ["AM", "PM"]
 
-    @State private var selHour:   Int = 12
-    @State private var selMinute: Int = 0
-    @State private var selPeriod: String = "AM"
+    @State private var selHour:      Int    = 12
+    @State private var selMinute:    Int    = 0
+    @State private var selPeriod:    String = "AM"
+    /// True when the loaded time was not already on a 5-minute boundary and was rounded.
+    @State private var wasRounded:   Bool   = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Hour wheel
-            Picker("", selection: $selHour) {
-                ForEach(hours, id: \.self) { h in
-                    Text("\(h)").tag(h)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(AppTheme.textPrimary)
+        VStack(spacing: 4) {
+            HStack(spacing: 0) {
+                // Hour wheel
+                Picker("", selection: $selHour) {
+                    ForEach(hours, id: \.self) { h in
+                        Text("\(h)").tag(h)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(AppTheme.textPrimary)
+                    }
                 }
-            }
-            .pickerStyle(.wheel)
-            .frame(width: 70, height: 120)
-            .clipped()
+                .pickerStyle(.wheel)
+                .frame(width: 70, height: 120)
+                .clipped()
 
-            Text(":")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(AppTheme.textSecondary)
-                .padding(.bottom, 2)
+                Text(":")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(AppTheme.textSecondary)
+                    .padding(.bottom, 2)
 
-            // Minute wheel (5s only)
-            Picker("", selection: $selMinute) {
-                ForEach(minutes, id: \.self) { m in
-                    Text(String(format: "%02d", m)).tag(m)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(AppTheme.textPrimary)
+                // Minute wheel (5s only)
+                Picker("", selection: $selMinute) {
+                    ForEach(minutes, id: \.self) { m in
+                        Text(String(format: "%02d", m)).tag(m)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(AppTheme.textPrimary)
+                    }
                 }
-            }
-            .pickerStyle(.wheel)
-            .frame(width: 70, height: 120)
-            .clipped()
+                .pickerStyle(.wheel)
+                .frame(width: 70, height: 120)
+                .clipped()
 
-            // AM/PM wheel
-            Picker("", selection: $selPeriod) {
-                ForEach(periods, id: \.self) { p in
-                    Text(p).tag(p)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(AppTheme.textPrimary)
+                // AM/PM wheel
+                Picker("", selection: $selPeriod) {
+                    ForEach(periods, id: \.self) { p in
+                        Text(p).tag(p)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(AppTheme.textPrimary)
+                    }
                 }
+                .pickerStyle(.wheel)
+                .frame(width: 70, height: 120)
+                .clipped()
             }
-            .pickerStyle(.wheel)
-            .frame(width: 70, height: 120)
-            .clipped()
+            .padding(.vertical, 4)
+            .background(AppTheme.oceanLight.opacity(0.3))
+            .cornerRadius(10)
+
+            // Show a brief note when the original time was rounded to the nearest 5 minutes.
+            if wasRounded {
+                HStack(spacing: 4) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 11))
+                    Text("Rounded to nearest 5 min")
+                        .font(.system(size: 11))
+                }
+                .foregroundColor(AppTheme.warning)
+                .padding(.top, 2)
+                .transition(.opacity)
+            }
         }
-        .colorScheme(.dark)
-        .padding(.vertical, 4)
-        .background(AppTheme.oceanLight.opacity(0.3))
-        .cornerRadius(10)
         .onAppear { loadFromDate() }
         .onChange(of: selHour)   { _, _ in writeToDate() }
         .onChange(of: selMinute) { _, _ in writeToDate() }
@@ -488,7 +504,10 @@ struct FiveMinutePicker: View {
         if hour == 0       { hour = 12 }
         else if hour > 12  { hour -= 12 }
         selHour   = hour
-        selMinute = (min / 5) * 5
+        let rounded = (min / 5) * 5
+        // Notify the user if we had to round a non-5-multiple minute value.
+        wasRounded = rounded != min
+        selMinute  = rounded
     }
 
     private func writeToDate() {
@@ -595,6 +614,73 @@ struct EmptyStateView: View {
     }
 }
 
+// MARK: - App Footer (credits + settings)
+/// Shown at the bottom of every main page. Self-contained: presents the
+/// Settings sheet itself, so a page only needs to drop `AppFooter()` in.
+/// Requires `TimesheetStore` in the environment (to forward into Settings).
+struct AppFooter: View {
+    @EnvironmentObject private var store: TimesheetStore
+    @State private var showSettings = false
+    @State private var showSurf     = false
+
+    var body: some View {
+        VStack(spacing: 12) {
+            CoralButton("🏄 Where's the Surf?") { showSurf = true }
+                .padding(.horizontal, AppTheme.screenPad)
+
+            Button { showSettings = true } label: {
+                Label("Settings", systemImage: "gearshape.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(AppTheme.coral)
+            }
+            .accessibilityLabel("Open Settings")
+
+            if let appURL = AppConstants.kauaiTodayAppURL {
+                Link(destination: appURL) {
+                    Label("Kauai Today app", systemImage: "apple.logo")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppTheme.coral)
+                }
+            }
+            if let webURL = AppConstants.kauaiTodayWebURL {
+                Link(destination: webURL) {
+                    Label("Kauai Today interwebs", systemImage: "globe")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppTheme.coral)
+                }
+            }
+
+            Text("Made on Kauai with Aloha 🌺")
+                .font(.system(size: 12))
+                .foregroundColor(AppTheme.textTertiary)
+
+            HStack(spacing: 6) {
+                if let mail = AppConstants.mailtoURL {
+                    Link(AppConstants.developerName, destination: mail)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(AppTheme.coral)
+                } else {
+                    Text(AppConstants.developerName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(AppTheme.textSecondary)
+                }
+                Text("·").foregroundColor(AppTheme.textTertiary)
+                Text("© 2026")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppTheme.textTertiary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .sheet(isPresented: $showSurf) {
+            SurfSpotsMapView()
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView().environmentObject(store)
+        }
+    }
+}
+
 // MARK: - FAQ View
 struct FAQView: View {
     @Environment(\.dismiss) var dismiss
@@ -628,10 +714,10 @@ struct FAQView: View {
                                 HStack(spacing: 14) {
                                     Text("👨‍💻").font(.system(size: 34))
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text("Joey Wray")
+                                        Text(AppConstants.developerName)
                                             .font(.system(size: 18, weight: .bold))
                                             .foregroundColor(AppTheme.textPrimary)
-                                        if let url = URL(string: "https://joeywray.com") {
+                                        if let url = AppConstants.websiteURL {
                                             Link("joeywray.com", destination: url)
                                                 .font(.system(size: 14, weight: .semibold))
                                                 .foregroundColor(AppTheme.coral)
@@ -641,7 +727,7 @@ struct FAQView: View {
 
                                 Divider().background(AppTheme.oceanLight)
 
-                                if let mailURL = URL(string: "mailto:Joey@joeywray.com?subject=Kauai%20VIP%202026%20Feedback") {
+                                if let mailURL = AppConstants.mailtoURL {
                                     Link(destination: mailURL) {
                                         HStack(spacing: 12) {
                                             Image(systemName: "envelope.fill")
@@ -651,33 +737,9 @@ struct FAQView: View {
                                                 Text("Questions or Suggestions?")
                                                     .font(.system(size: 14, weight: .semibold))
                                                     .foregroundColor(AppTheme.textPrimary)
-                                                Text("Joey@joeywray.com")
+                                                Text(AppConstants.supportEmail)
                                                     .font(.system(size: 13))
                                                     .foregroundColor(AppTheme.coral)
-                                            }
-                                            Spacer()
-                                            Image(systemName: "chevron.right")
-                                                .font(.system(size: 12, weight: .semibold))
-                                                .foregroundColor(AppTheme.textTertiary)
-                                        }
-                                    }
-                                }
-
-                                Divider().background(AppTheme.oceanLight)
-
-                                if let venmoURL = URL(string: "https://venmo.com/u/Joey-Wray-1") {
-                                    Link(destination: venmoURL) {
-                                        HStack(spacing: 12) {
-                                            Image(systemName: "heart.fill")
-                                                .font(.system(size: 18))
-                                                .foregroundColor(AppTheme.success)
-                                            VStack(alignment: .leading, spacing: 3) {
-                                                Text("Donate")
-                                                    .font(.system(size: 14, weight: .semibold))
-                                                    .foregroundColor(AppTheme.textPrimary)
-                                                Text("venmo.com/u/Joey-Wray-1")
-                                                    .font(.system(size: 13))
-                                                    .foregroundColor(AppTheme.success)
                                             }
                                             Spacer()
                                             Image(systemName: "chevron.right")
@@ -696,7 +758,6 @@ struct FAQView: View {
             .navigationTitle("About")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(AppTheme.oceanDeep, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }

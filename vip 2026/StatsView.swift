@@ -40,15 +40,15 @@ struct StatsView: View {
                             case .periods: periodsContent
                             case .monthly: monthlyContent
                             }
+                            AppFooter()
                         }
                         .padding(.bottom, 40)
                     }
                 }
             }
-            .navigationTitle("Stats · \(store.driverName)")
+            .navigationTitle("Stats · \(store.displayName)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(AppTheme.oceanDeep, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Menu {
@@ -92,7 +92,7 @@ struct StatsView: View {
         let data = makeStatsPDF(
             title: "\(scope.rawValue) Report",
             sections: sections,
-            driverName: store.driverName
+            driverName: store.displayName
         )
         shareFile(data: data, filename: filename)
     }
@@ -110,7 +110,7 @@ struct StatsView: View {
             for (month, trips) in groups {
                 for t in trips {
                     rows.append([
-                        csvQuote(month), t.formattedDate, t.vehicle.rawValue,
+                        csvQuote(month), csvQuote(t.formattedDate), t.vehicle.rawValue,
                         t.service.rawValue, csvQuote(t.clientName),
                         t.formattedPickup, t.formattedDropoff,
                         t.formattedLeftBase, t.formattedBackBase,
@@ -151,6 +151,9 @@ struct StatsView: View {
             .padding(.horizontal, AppTheme.screenPad)
             .padding(.top, AppTheme.cardSpacing)
 
+            SectionLabel(text: "Insights")
+            insightsCard(TripStats(allTrips))
+
             SectionLabel(text: "By Service Type")
             serviceBreakdown(trips: allTrips)
                 .padding(.horizontal, AppTheme.screenPad)
@@ -168,16 +171,25 @@ struct StatsView: View {
             if store.periods.isEmpty {
                 EmptyStateView(icon: "📋", message: "No Periods", sub: "Add a pay period to see stats.")
             } else {
-                ForEach(store.periods) { period in
-                    periodSection(period)
+                // Skip the overall card when there's a single period (it would
+                // just duplicate that period's numbers).
+                if store.periods.count > 1 {
+                    SectionLabel(text: "Overall")
+                    grandSummaryCard(TripStats(allTrips))
+                }
+
+                ForEach(Array(store.periods.enumerated()), id: \.element.id) { idx, period in
+                    // store.periods is newest-first, so the next element is the previous period.
+                    let prevCount = idx + 1 < store.periods.count ? store.periods[idx + 1].trips.count : nil
+                    periodSection(period, previousTripCount: prevCount)
                 }
             }
         }
     }
 
-    private func periodSection(_ period: PayPeriod) -> some View {
+    private func periodSection(_ period: PayPeriod, previousTripCount: Int?) -> some View {
         VStack(spacing: 0) {
-            SectionLabel(text: period.label)
+            sectionHeader(period.label, current: period.trips.count, previous: previousTripCount)
 
             AppCard {
                 HStack(spacing: 0) {
@@ -185,7 +197,7 @@ struct StatsView: View {
                     Divider().frame(height: 44).background(AppTheme.oceanLight).padding(.horizontal, 12)
                     BigStat(label: "Charter", value: "\(charterTrips(period.trips))",  color: AppTheme.success)
                     Divider().frame(height: 44).background(AppTheme.oceanLight).padding(.horizontal, 12)
-                    BigStat(label: "Days",    value: "\(period.dayCount)",              color: AppTheme.info)
+                    BigStat(label: "Length",  value: "\(period.dayCount)d",             color: AppTheme.info)
                 }
             }
             .padding(.horizontal, AppTheme.screenPad)
@@ -226,16 +238,23 @@ struct StatsView: View {
             if groups.isEmpty {
                 EmptyStateView(icon: "📅", message: "No Data", sub: "Log trips to see monthly stats.")
             } else {
-                ForEach(groups, id: \.0) { month, trips in
-                    monthSection(month: month, trips: trips)
+                if groups.count > 1 {
+                    SectionLabel(text: "Overall")
+                    grandSummaryCard(TripStats(allTrips))
+                }
+
+                ForEach(Array(groups.enumerated()), id: \.element.0) { idx, group in
+                    // groups is newest-first, so the next element is the previous month.
+                    let prevCount = idx + 1 < groups.count ? groups[idx + 1].1.count : nil
+                    monthSection(month: group.0, trips: group.1, previousTripCount: prevCount)
                 }
             }
         }
     }
 
-    private func monthSection(month: String, trips: [Trip]) -> some View {
+    private func monthSection(month: String, trips: [Trip], previousTripCount: Int?) -> some View {
         VStack(spacing: 0) {
-            SectionLabel(text: month)
+            sectionHeader(month, current: trips.count, previous: previousTripCount)
 
             AppCard {
                 HStack(spacing: 0) {
@@ -243,7 +262,7 @@ struct StatsView: View {
                     Divider().frame(height: 44).background(AppTheme.oceanLight).padding(.horizontal, 12)
                     BigStat(label: "Charter", value: "\(charterTrips(trips))",  color: AppTheme.success)
                     Divider().frame(height: 44).background(AppTheme.oceanLight).padding(.horizontal, 12)
-                    BigStat(label: "Days",    value: "\(uniqueDays(trips))",     color: AppTheme.info)
+                    BigStat(label: "Days Worked", value: "\(uniqueDays(trips))", color: AppTheme.info)
                 }
             }
             .padding(.horizontal, AppTheme.screenPad)
@@ -284,6 +303,7 @@ struct StatsView: View {
                 ForEach(ServiceType.allCases) { service in
                     let count = trips.filter { $0.service == service }.count
                     if count > 0 {
+                        let pct = trips.isEmpty ? 0 : Int((Double(count) / Double(trips.count) * 100).rounded())
                         HStack(spacing: 10) {
                             Text(service.icon)
                                 .font(.system(size: 16))
@@ -304,6 +324,10 @@ struct StatsView: View {
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundColor(AppTheme.textPrimary)
                                 .frame(width: 28, alignment: .trailing)
+                            Text("\(pct)%")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(AppTheme.textTertiary)
+                                .frame(width: 38, alignment: .trailing)
                         }
                     }
                 }
@@ -319,6 +343,7 @@ struct StatsView: View {
                 ForEach(Vehicle.allCases) { vehicle in
                     let count = trips.filter { $0.vehicle == vehicle }.count
                     if count > 0 {
+                        let pct = trips.isEmpty ? 0 : Int((Double(count) / Double(trips.count) * 100).rounded())
                         HStack(spacing: 10) {
                             Text(vehicle.icon)
                                 .font(.system(size: 16))
@@ -339,6 +364,10 @@ struct StatsView: View {
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundColor(AppTheme.textPrimary)
                                 .frame(width: 28, alignment: .trailing)
+                            Text("\(pct)%")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(AppTheme.textTertiary)
+                                .frame(width: 38, alignment: .trailing)
                         }
                     }
                 }
@@ -371,18 +400,19 @@ struct StatsView: View {
     private func monthlyGroups() -> [(String, [Trip])] {
         let fmt = DateFormatter()
         fmt.dateFormat = "MMMM yyyy"
-        var groups: [String: (Date, [Trip])] = [:]
+        // Collect trips into buckets keyed by month string.
+        var groups: [String: [Trip]] = [:]
         for trip in allTrips {
-            let key = fmt.string(from: trip.date)
-            if groups[key] == nil {
-                groups[key] = (trip.date, [trip])
-            } else {
-                groups[key]?.1.append(trip)
-            }
+            groups[fmt.string(from: trip.date), default: []].append(trip)
         }
+        // Sort by the *earliest* trip date in each bucket so ordering is deterministic
+        // regardless of dictionary iteration order.
         return groups
-            .map { ($0.key, $0.value.0, $0.value.1) }
-            .sorted { $0.1 > $1.1 }
+            .map { key, trips -> (String, Date, [Trip]) in
+                let earliest = trips.map(\.date).min() ?? Date.distantPast
+                return (key, earliest, trips)
+            }
+            .sorted { $0.1 > $1.1 }   // newest month first
             .map { ($0.0, $0.2) }
     }
 
@@ -392,9 +422,102 @@ struct StatsView: View {
         case .charter: return AppTheme.success
         }
     }
+
+    // MARK: - Insight cards
+
+    private func insightsCard(_ stats: TripStats) -> some View {
+        AppCard {
+            VStack(spacing: 12) {
+                HStack(spacing: 0) {
+                    MiniStat(label: "Avg/Day",      value: stats.uniqueDays > 0 ? String(format: "%.1f", stats.avgTripsPerDay) : "--", color: AppTheme.info)
+                    MiniStat(label: "Avg Charter",  value: formatDurationHM(stats.avgCharterSeconds),       color: AppTheme.success)
+                }
+                Divider().background(AppTheme.oceanLight.opacity(0.4))
+                HStack(spacing: 0) {
+                    MiniStat(label: "Longest Charter", value: formatDurationHM(stats.longestCharterSeconds ?? 0), color: AppTheme.warning)
+                    MiniStat(label: "Busiest Day",     value: stats.busiestWeekday?.name ?? "--",                color: AppTheme.coral)
+                }
+            }
+        }
+        .padding(.horizontal, AppTheme.screenPad)
+        .padding(.top, AppTheme.cardSpacing)
+    }
+
+    // MARK: - Grand summary (Periods / Monthly overall)
+
+    private func grandSummaryCard(_ stats: TripStats) -> some View {
+        AppCard {
+            VStack(spacing: 12) {
+                HStack(spacing: 0) {
+                    BigStat(label: "Trips",   value: "\(stats.total)",      color: AppTheme.textPrimary)
+                    Divider().frame(height: 44).background(AppTheme.oceanLight).padding(.horizontal, 12)
+                    BigStat(label: "Charter", value: "\(stats.charter)",    color: AppTheme.success)
+                    Divider().frame(height: 44).background(AppTheme.oceanLight).padding(.horizontal, 12)
+                    BigStat(label: "Days Worked", value: "\(stats.uniqueDays)", color: AppTheme.info)
+                }
+                Divider().background(AppTheme.oceanLight.opacity(0.4))
+                HStack(spacing: 0) {
+                    MiniStat(label: "Charter Hrs", value: formatDurationHM(stats.charterSeconds), color: AppTheme.warning)
+                    MiniStat(label: "Duty Hrs",    value: formatDurationHM(stats.dutySeconds),    color: AppTheme.coral)
+                }
+            }
+        }
+        .padding(.horizontal, AppTheme.screenPad)
+    }
+
+    // MARK: - Section header with period-over-period delta
+
+    private func sectionHeader(_ title: String, current: Int, previous: Int?) -> some View {
+        HStack {
+            Text(title.uppercased())
+                .font(.system(size: AppTheme.caption, weight: .semibold))
+                .foregroundColor(AppTheme.textTertiary)
+                .tracking(0.8)
+            Spacer()
+            deltaBadge(current: current, previous: previous)
+        }
+        .padding(.horizontal, AppTheme.screenPad)
+        .padding(.top, AppTheme.sectionSpacing)
+        .padding(.bottom, 6)
+    }
+
+    @ViewBuilder
+    private func deltaBadge(current: Int, previous: Int?) -> some View {
+        if let previous, previous != current {
+            let d = current - previous
+            HStack(spacing: 2) {
+                Image(systemName: d > 0 ? "arrow.up.right" : "arrow.down.right")
+                    .font(.system(size: 9, weight: .bold))
+                Text("\(abs(d)) vs prev")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .foregroundColor(d > 0 ? AppTheme.success : AppTheme.error)
+        }
+    }
 }
 
 // MARK: - Stat Components
+
+private struct MiniStat: View {
+    let label: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundColor(color)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(AppTheme.textTertiary)
+                .tracking(0.5)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
 
 private struct BigStat: View {
     let label: String

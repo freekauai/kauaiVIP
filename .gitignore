@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Xcode build artifacts
+build/
+DerivedData/
+*.xcuserstate
+*.moved-aside
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# Note: xcuserdata/ is intentionally tracked for this project.

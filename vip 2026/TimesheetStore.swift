@@ -10,11 +10,19 @@ import Combine
 class TimesheetStore: ObservableObject {
     @Published var periods:       [PayPeriod] = []
     @Published var driverName:    String      = ""
+    @Published var companyName:   String      = ""
     @Published var lastSaveError: String?     = nil
+
+    /// Label shown on screen and in PDF exports: the company name when set,
+    /// otherwise the driver's name.
+    var displayName: String {
+        companyName.isEmpty ? driverName : companyName
+    }
 
     // Legacy UserDefaults keys — used only for one-time migration
     private let legacyPeriodsKey    = "kauai_vip_2026_periods"
     private let driverNameKey       = "kauai_vip_2026_driver_name"
+    private let companyNameKey      = "kauai_vip_2026_company_name"
 
     // Documents-directory file URL — survives reinstall via iCloud/iTunes backup
     private var periodsFileURL: URL {
@@ -28,10 +36,15 @@ class TimesheetStore: ObservableObject {
         load()
     }
 
-    // MARK: - Driver Name
+    // MARK: - Driver Name / Company
     func saveDriverName(_ name: String) {
         driverName = name
         UserDefaults.standard.set(name, forKey: driverNameKey)
+    }
+
+    func saveCompanyName(_ name: String) {
+        companyName = name.trimmingCharacters(in: .whitespaces)
+        UserDefaults.standard.set(companyName, forKey: companyNameKey)
     }
 
     // MARK: - Sorting (newest startDate first)
@@ -48,6 +61,12 @@ class TimesheetStore: ObservableObject {
 
     func deletePeriod(_ period: PayPeriod) {
         periods.removeAll { $0.id == period.id }
+        save()
+    }
+
+    /// Removes all pay periods and trips — used by the Settings "Clear All Data" action.
+    func clearAllData() {
+        periods = []
         save()
     }
 
@@ -85,7 +104,7 @@ class TimesheetStore: ObservableObject {
             for t in period.trips.sorted(by: { $0.date < $1.date }) {
                 let row = [
                     csvQuote(period.label),
-                    t.formattedDate,
+                    csvQuote(t.formattedDate),
                     t.vehicle.rawValue,
                     t.service.rawValue,
                     csvQuote(t.clientName),
@@ -130,7 +149,8 @@ class TimesheetStore: ObservableObject {
         // Always ensure newest period is first regardless of on-disk order
         sortPeriods()
 
-        driverName = UserDefaults.standard.string(forKey: driverNameKey) ?? ""
+        driverName  = UserDefaults.standard.string(forKey: driverNameKey)  ?? ""
+        companyName = UserDefaults.standard.string(forKey: companyNameKey) ?? ""
     }
 
 }

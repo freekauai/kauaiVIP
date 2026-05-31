@@ -42,6 +42,7 @@ struct Trip: Identifiable, Codable {
     var service:      ServiceType = .airport
     var clientName:   String      = ""
     var notes:        String      = ""
+    var isActive:     Bool        = true    // user toggle — false = dimmed/excluded from next-up
 
     // Optional time fields
     var hasPUTime:    Bool        = false
@@ -53,32 +54,69 @@ struct Trip: Identifiable, Codable {
     var hasBackBase:  Bool        = false
     var timeBackBase: Date?       = nil
 
+    // Display options (per-trip) — both default OFF, set in the edit form.
+    var isHighlighted: Bool       = false   // gold border + star on the card
+    var showCountdown: Bool       = false   // live HST countdown to this trip's earliest entered time
+
     // MARK: Computed
 
-    /// Driver duty time: earliest recorded time field → latest recorded time field.
-    var charterDuration: TimeInterval? {
-        let times: [Date] = [
-            hasPUTime   ? pickupTime   : nil,
-            hasDOTime   ? dropoffTime  : nil,
-            hasLeftBase ? timeLeftBase : nil,
-            hasBackBase ? timeBackBase : nil,
-        ].compactMap { $0 }
-        guard let earliest = times.min(),
-              let latest   = times.max(),
-              latest > earliest else { return nil }
-        return latest.timeIntervalSince(earliest)
+    /// Re-anchors a time-of-day onto this trip's calendar date. The time pickers
+    /// store hour/minute on whatever date the picker was initialized with (often
+    /// "today"), so schedule math (countdown / live window) must combine the
+    /// entered time-of-day with the trip's actual date.
+    private func onTripDate(_ t: Date) -> Date {
+        let cal = Calendar.current
+        var comps = cal.dateComponents([.year, .month, .day], from: date)
+        let hm    = cal.dateComponents([.hour, .minute], from: t)
+        comps.hour   = hm.hour
+        comps.minute = hm.minute
+        return cal.date(from: comps) ?? t
     }
 
-    /// True if `now` falls within this trip's active window (earliest → latest time field).
-    func isActive(at now: Date) -> Bool {
-        let times: [Date] = [
+    /// Entered time fields in a charter's natural chronological order
+    /// (leave base → pickup → drop-off → back to base), each anchored to the
+    /// trip's date. Any field whose clock time lands before the previous one is
+    /// rolled to the next day, so overnight trips (e.g. 9 PM pickup, 12:30 AM
+    /// back-to-base) measure correctly instead of spanning ~20 hours backward.
+    private var orderedTimes: [Date] {
+        let cal = Calendar.current
+        let sequence: [Date?] = [
+            hasLeftBase ? timeLeftBase : nil,
             hasPUTime   ? pickupTime   : nil,
             hasDOTime   ? dropoffTime  : nil,
-            hasLeftBase ? timeLeftBase : nil,
             hasBackBase ? timeBackBase : nil,
-        ].compactMap { $0 }
-        guard let earliest = times.min(), let latest = times.max(), latest > earliest else { return false }
-        return now >= earliest && now <= latest
+        ]
+        var result: [Date] = []
+        for t in sequence.compactMap({ $0 }) {
+            var anchored = onTripDate(t)
+            if let previous = result.last {
+                while anchored < previous {
+                    anchored = cal.date(byAdding: .day, value: 1, to: anchored)
+                        ?? anchored.addingTimeInterval(86_400)
+                }
+            }
+            result.append(anchored)
+        }
+        return result
+    }
+
+    /// Driver duty time: first time point → last time point (handles overnight).
+    var charterDuration: TimeInterval? {
+        let times = orderedTimes
+        guard let start = times.first, let end = times.last, end > start else { return nil }
+        return end.timeIntervalSince(start)
+    }
+
+    /// The trip's start time (first chronological field); used for countdowns.
+    var earliestEnteredTime: Date? {
+        orderedTimes.first
+    }
+
+    /// True if `now` falls within this trip's active window (start → end).
+    func isLive(at now: Date) -> Bool {
+        let times = orderedTimes
+        guard let start = times.first, let end = times.last, end > start else { return false }
+        return now >= start && now <= end
     }
 
     var formattedDate: String {
@@ -99,6 +137,43 @@ struct Trip: Identifiable, Codable {
     var formattedBackBase: String {
         guard hasBackBase, let t = timeBackBase else { return "--" }
         return t.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+// MARK: - Trip backward-compatible Codable
+// A custom decoder (in an extension, so the synthesized memberwise init the
+// app relies on is preserved) decodes every field with `decodeIfPresent`,
+// falling back to defaults. This lets trips saved by older builds — which
+// lack newer keys like `isHighlighted` / `showCountdown` — load without
+// throwing. The synthesized encoder is kept as-is.
+extension Trip {
+    private enum CodingKeys: String, CodingKey {
+        case id, date, vehicle, service, clientName, notes, isActive
+        case hasPUTime, pickupTime, hasDOTime, dropoffTime
+        case hasLeftBase, timeLeftBase, hasBackBase, timeBackBase
+        case isHighlighted, showCountdown
+    }
+
+    init(from decoder: Decoder) throws {
+        self = Trip()   // start from defaults, then override what's present
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id            = try c.decodeIfPresent(UUID.self,        forKey: .id)            ?? id
+        date          = try c.decodeIfPresent(Date.self,        forKey: .date)          ?? date
+        vehicle       = try c.decodeIfPresent(Vehicle.self,     forKey: .vehicle)       ?? vehicle
+        service       = try c.decodeIfPresent(ServiceType.self, forKey: .service)       ?? service
+        clientName    = try c.decodeIfPresent(String.self,      forKey: .clientName)    ?? clientName
+        notes         = try c.decodeIfPresent(String.self,      forKey: .notes)         ?? notes
+        isActive      = try c.decodeIfPresent(Bool.self,        forKey: .isActive)      ?? isActive
+        hasPUTime     = try c.decodeIfPresent(Bool.self,        forKey: .hasPUTime)     ?? hasPUTime
+        pickupTime    = try c.decodeIfPresent(Date.self,        forKey: .pickupTime)    ?? pickupTime
+        hasDOTime     = try c.decodeIfPresent(Bool.self,        forKey: .hasDOTime)     ?? hasDOTime
+        dropoffTime   = try c.decodeIfPresent(Date.self,        forKey: .dropoffTime)   ?? dropoffTime
+        hasLeftBase   = try c.decodeIfPresent(Bool.self,        forKey: .hasLeftBase)   ?? hasLeftBase
+        timeLeftBase  = try c.decodeIfPresent(Date.self,        forKey: .timeLeftBase)  ?? timeLeftBase
+        hasBackBase   = try c.decodeIfPresent(Bool.self,        forKey: .hasBackBase)   ?? hasBackBase
+        timeBackBase  = try c.decodeIfPresent(Date.self,        forKey: .timeBackBase)  ?? timeBackBase
+        isHighlighted = try c.decodeIfPresent(Bool.self,        forKey: .isHighlighted) ?? isHighlighted
+        showCountdown = try c.decodeIfPresent(Bool.self,        forKey: .showCountdown) ?? showCountdown
     }
 }
 
@@ -315,7 +390,7 @@ extension PayPeriod {
         var rows: [String] = ["Date,Vehicle,Service,Client,PU Time,DO Time,Left Base,Back Base,Notes"]
         for t in trips {
             let row = [
-                t.formattedDate,
+                csvQuote(t.formattedDate),
                 t.vehicle.rawValue,
                 t.service.rawValue,
                 csvQuote(t.clientName),
@@ -333,6 +408,68 @@ extension PayPeriod {
 
 func csvQuote(_ s: String) -> String {
     "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\""
+}
+
+// MARK: - Aggregate Trip Statistics
+/// Single source of truth for the numbers shown on the Stats screen and in the
+/// PDF export. `charterDuration` (latest entered time − earliest) is the duty
+/// span of a trip; charter hours sum that over charter trips, duty hours over all.
+struct TripStats {
+    let total:        Int
+    let airport:      Int
+    let charter:      Int
+    let uniqueDays:   Int
+    let charterSeconds: Double          // duty span summed over charter trips
+    let dutySeconds:    Double          // duty span summed over ALL trips
+    let longestCharterSeconds: Double?
+    let weekdayCounts:  [Int]           // 7 entries, index 0 = Sunday … 6 = Saturday
+    let serviceCounts:  [(ServiceType, Int)]
+    let vehicleCounts:  [(Vehicle, Int)]
+    /// Count of charter trips that actually have a measurable duration (≥2 times).
+    let charterWithDuration: Int
+
+    init(_ trips: [Trip]) {
+        total      = trips.count
+        airport    = trips.filter { $0.service == .airport }.count
+        charter    = trips.filter { $0.service == .charter }.count
+        uniqueDays = Set(trips.map { Calendar.current.startOfDay(for: $0.date) }).count
+
+        let charterTrips     = trips.filter { $0.service == .charter }
+        let charterDurations = charterTrips.compactMap(\.charterDuration)
+        charterSeconds        = charterDurations.reduce(0, +)
+        charterWithDuration   = charterDurations.count
+        dutySeconds           = trips.compactMap(\.charterDuration).reduce(0, +)
+        longestCharterSeconds = charterDurations.max()
+
+        var wk = [Int](repeating: 0, count: 7)
+        let cal = Calendar.current
+        for t in trips { wk[(cal.component(.weekday, from: t.date) - 1) % 7] += 1 }
+        weekdayCounts = wk
+
+        serviceCounts = ServiceType.allCases.map { s in (s, trips.filter { $0.service == s }.count) }
+        vehicleCounts = Vehicle.allCases.map     { v in (v, trips.filter { $0.vehicle == v }.count) }
+    }
+
+    var avgTripsPerDay:   Double { uniqueDays > 0 ? Double(total) / Double(uniqueDays) : 0 }
+    /// Average duty time per charter trip that has time data (excludes charter
+    /// trips with no/insufficient times so they don't drag the average down).
+    var avgCharterSeconds: Double { charterWithDuration > 0 ? charterSeconds / Double(charterWithDuration) : 0 }
+
+    /// The weekday with the most trips (nil if there are no trips).
+    var busiestWeekday: (name: String, count: Int)? {
+        guard let maxCount = weekdayCounts.max(), maxCount > 0,
+              let idx = weekdayCounts.firstIndex(of: maxCount) else { return nil }
+        let names = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+        return (names[idx], maxCount)
+    }
+}
+
+/// Formats a duration in seconds as "Hh Mm" (or "Hh"), "--" when zero/negative.
+func formatDurationHM(_ seconds: Double) -> String {
+    guard seconds > 0 else { return "--" }
+    let h = Int(seconds) / 3_600
+    let m = (Int(seconds) % 3_600) / 60
+    return m > 0 ? "\(h)h \(m)m" : "\(h)h"
 }
 
 // MARK: - Stats PDF Export Helper
@@ -367,16 +504,10 @@ func makeStatsPDF(title: String, sections: [(String, [Trip])], driverName: Strin
     }
 
     let allTrips = sections.flatMap(\.1)
-    let airportCount = allTrips.filter { $0.service == .airport }.count
-    let charterCount = allTrips.filter { $0.service == .charter }.count
-    let charterDuration = allTrips.filter { $0.service == .charter }
-        .compactMap(\.charterDuration).reduce(0.0, +)
-    let charterHrsStr: String = {
-        guard charterDuration > 0 else { return "--" }
-        let h = Int(charterDuration) / 3_600
-        let m = (Int(charterDuration) % 3_600) / 60
-        return m > 0 ? "\(h)h \(m)m" : "\(h)h"
-    }()
+    let overallStats = TripStats(allTrips)
+    let airportCount = overallStats.airport
+    let charterCount = overallStats.charter
+    let charterHrsStr = formatDurationHM(overallStats.charterSeconds)
 
     let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: pageW, height: pageH))
 
@@ -387,11 +518,6 @@ func makeStatsPDF(title: String, sections: [(String, [Trip])], driverName: Strin
             cg.move(to: CGPoint(x: margin, y: dy))
             cg.addLine(to: CGPoint(x: pageW - margin, y: dy))
             cg.strokePath()
-        }
-
-        func startPage() -> (CGContext, CGFloat) {
-            ctx.beginPage()
-            return (ctx.cgContext, margin)
         }
 
         // ── First page ───────────────────────────────────────────
@@ -442,6 +568,28 @@ func makeStatsPDF(title: String, sections: [(String, [Trip])], driverName: Strin
                          color: stat.2, width: statW)
         }
         y += 44
+
+        // ── Insights row ──────────────────────────────────────────
+        let insights: [(String, String)] = [
+            ("DUTY HRS",      formatDurationHM(overallStats.dutySeconds)),
+            ("AVG TRIPS/DAY", overallStats.uniqueDays > 0 ? String(format: "%.1f", overallStats.avgTripsPerDay) : "--"),
+            ("AVG CHARTER",   formatDurationHM(overallStats.avgCharterSeconds)),
+            ("LONGEST",       formatDurationHM(overallStats.longestCharterSeconds ?? 0)),
+            ("BUSIEST DAY",   overallStats.busiestWeekday.map { String($0.name.prefix(3)) } ?? "--"),
+        ]
+        let insW = contentW / CGFloat(insights.count)
+        for (i, item) in insights.enumerated() {
+            let sx = margin + CGFloat(i) * insW
+            _ = drawText(item.0, in: ctx, at: CGPoint(x: sx, y: y),
+                         font: .systemFont(ofSize: 8, weight: .semibold),
+                         color: .gray, width: insW)
+            _ = drawText(item.1, in: ctx, at: CGPoint(x: sx, y: y + 12),
+                         font: .systemFont(ofSize: 15, weight: .bold),
+                         color: oceanDeep, width: insW)
+        }
+        y += 40
+        drawDivider(cg: ctx.cgContext, at: y)
+        y += 8
 
         let dayFmt = DateFormatter(); dayFmt.dateFormat = "d"
         let monFmt = DateFormatter(); monFmt.dateFormat = "MMM"

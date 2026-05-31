@@ -4,27 +4,47 @@
 // ╚══════════════════════════════════════════════════════════════╝
 
 import SwiftUI
+import UIKit
 
 // MARK: - Color Palette
+// Backgrounds, text and accent resolve from the user's selected theme:
+// System / Light / Dark / Blue Light / Blue Dark (stored in @AppStorage
+// "appTheme"). "System" follows the device light/dark; the rest are explicit
+// palettes. The app root applies .id(appTheme) so a theme change rebuilds the
+// view tree and these computed colors re-resolve.
 enum AppTheme {
     // Backgrounds
-    static let oceanDeep    = Color(hex: "0A1929")   // Main screen bg
-    static let oceanMedium  = Color(hex: "1E3A5F")   // Cards, elevated surfaces
-    static let oceanLight   = Color(hex: "2E4A6F")   // Borders, dividers
+    static var oceanDeep:   Color { resolve(\.bg) }     // Main screen bg
+    static var oceanMedium: Color { resolve(\.card) }   // Cards, elevated surfaces
+    static var oceanLight:  Color { resolve(\.border) } // Borders, dividers
 
-    // Accent
-    static let coral        = Color(hex: "FF6B6B")   // Primary CTA, highlights
+    // Accent — primary CTA / highlights (blue in the Blue themes, coral otherwise)
+    static var coral: Color { resolve(\.accent) }
 
     // Text
-    static let textPrimary   = Color.white
-    static let textSecondary = Color(hex: "B0BEC5")
-    static let textTertiary  = Color(hex: "78909C")
+    static var textPrimary:   Color { resolve(\.textPrimary) }
+    static var textSecondary: Color { resolve(\.textSecondary) }
+    static var textTertiary:  Color { resolve(\.textTertiary) }
 
-    // Status
-    static let success      = Color(hex: "4CAF50")
+    // "Success"/positive accent — theme-matched (teal/sky, never green).
+    static var success: Color { resolve(\.success) }
+
+    // Status (shared across all themes)
     static let warning      = Color(hex: "FFC107")
     static let error        = Color(hex: "F44336")
     static let info         = Color(hex: "2196F3")
+
+    /// Resolves a palette color for the currently-selected theme.
+    private static func resolve(_ key: KeyPath<ThemePalette, Color>) -> Color {
+        switch UserDefaults.standard.string(forKey: "appTheme") ?? "system" {
+        case "light":     return ThemePalette.classicLight[keyPath: key]
+        case "dark":      return ThemePalette.classicDark[keyPath: key]
+        case "blueLight": return ThemePalette.blueLight[keyPath: key]
+        case "blueDark":  return ThemePalette.blueDark[keyPath: key]
+        default:          return Color(light: ThemePalette.classicLight[keyPath: key],
+                                       dark:  ThemePalette.classicDark[keyPath: key])
+        }
+    }
 
     // Spacing
     static let screenPad:    CGFloat = 16
@@ -50,6 +70,43 @@ enum AppTheme {
     static let caption:    CGFloat = 12
 }
 
+// MARK: - Theme Palettes
+/// One palette per selectable theme. Blue themes use a popular azure/blue
+/// (Tailwind blue-600 / blue-500) as the accent and blue-tinted surfaces.
+private struct ThemePalette {
+    let bg, card, border, accent, success: Color
+    let textPrimary, textSecondary, textTertiary: Color
+
+    // Classic "ocean" (default light / dark) — success is a teal that fits the ocean palette
+    static let classicLight = ThemePalette(
+        bg: Color(hex: "F2F6FA"), card: Color(hex: "FFFFFF"), border: Color(hex: "D5DEE7"), accent: Color(hex: "FF6B6B"), success: Color(hex: "0E9DB4"),
+        textPrimary: Color(hex: "0A1929"), textSecondary: Color(hex: "546E7A"), textTertiary: Color(hex: "78909C"))
+
+    static let classicDark = ThemePalette(
+        bg: Color(hex: "0A1929"), card: Color(hex: "1E3A5F"), border: Color(hex: "2E4A6F"), accent: Color(hex: "FF6B6B"), success: Color(hex: "2BB7C9"),
+        textPrimary: .white, textSecondary: Color(hex: "B0BEC5"), textTertiary: Color(hex: "78909C"))
+
+    // Blue (popular azure) light / dark — success is a sky-blue that matches the theme
+    static let blueLight = ThemePalette(
+        bg: Color(hex: "EFF4FF"), card: Color(hex: "FFFFFF"), border: Color(hex: "D6E2FB"), accent: Color(hex: "2563EB"), success: Color(hex: "0EA5E9"),
+        textPrimary: Color(hex: "0F2547"), textSecondary: Color(hex: "44556F"), textTertiary: Color(hex: "7488A3"))
+
+    static let blueDark = ThemePalette(
+        bg: Color(hex: "0B1733"), card: Color(hex: "15264D"), border: Color(hex: "243B6B"), accent: Color(hex: "3B82F6"), success: Color(hex: "38BDF8"),
+        textPrimary: .white, textSecondary: Color(hex: "AEC0E0"), textTertiary: Color(hex: "7C92BC"))
+}
+
+// MARK: - Dynamic (light/dark) Color
+extension Color {
+    /// A color that resolves to `light` in light mode and `dark` in dark mode,
+    /// following the active UITraitCollection (driven by .preferredColorScheme).
+    init(light: Color, dark: Color) {
+        self.init(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light)
+        })
+    }
+}
+
 // MARK: - Color Hex Initializer
 extension Color {
     init(hex: String) {
@@ -73,13 +130,27 @@ extension Color {
     }
 }
 
+// MARK: - Canonical Card Style Constants
+// Single source of truth consumed by both AppCardModifier and AppCard (SharedComponents).
+extension AppTheme {
+    static let cardShadowColor:  Color   = .black.opacity(0.25)
+    static let cardShadowRadius: CGFloat = 6
+    static let cardShadowX:      CGFloat = 0
+    static let cardShadowY:      CGFloat = 3
+}
+
 // MARK: - View Modifiers
+/// Applies the canonical card surface style to any existing view.
+/// For wrapping content in a card container use `AppCard` (SharedComponents.swift).
 struct AppCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(AppTheme.oceanMedium)
             .cornerRadius(AppTheme.cardRadius)
-            .shadow(color: .black.opacity(0.3), radius: 6, x: 0, y: 3)
+            .shadow(color: AppTheme.cardShadowColor,
+                    radius: AppTheme.cardShadowRadius,
+                    x: AppTheme.cardShadowX,
+                    y: AppTheme.cardShadowY)
     }
 }
 

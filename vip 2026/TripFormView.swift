@@ -30,6 +30,10 @@ struct TripFormView: View {
     @State private var hasBackBase:  Bool = false
     @State private var timeBackBase: Date = Date()
 
+    // Display options
+    @State private var isHighlighted: Bool = false
+    @State private var showCountdown: Bool = false
+
     @State private var showValidationAlert = false
     @State private var validationMsg       = ""
 
@@ -92,7 +96,6 @@ struct TripFormView: View {
                                         .datePickerStyle(.graphical)
                                         .labelsHidden()
                                         .accentColor(AppTheme.coral)
-                                        .colorScheme(.dark)
                                 }
                             }
 
@@ -126,6 +129,36 @@ struct TripFormView: View {
                                 }
                             }
 
+                            // ── Display Options ────────────────────────
+                            AppCard {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    Text("⭐️ DISPLAY OPTIONS").labelStyle()
+                                    Toggle(isOn: $isHighlighted) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Highlight Trip")
+                                                .font(.system(size: 15, weight: .semibold))
+                                                .foregroundColor(AppTheme.textPrimary)
+                                            Text("Gold border + star to make this trip stand out")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(AppTheme.textTertiary)
+                                        }
+                                    }
+                                    .tint(AppTheme.coral)
+                                    AppDivider()
+                                    Toggle(isOn: $showCountdown) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Countdown Timer")
+                                                .font(.system(size: 15, weight: .semibold))
+                                                .foregroundColor(AppTheme.textPrimary)
+                                            Text("Live countdown (HST) to this trip's first time")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(AppTheme.textTertiary)
+                                        }
+                                    }
+                                    .tint(AppTheme.coral)
+                                }
+                            }
+
                             // ── Notes ──────────────────────────────────
                             AppCard {
                                 VStack(alignment: .leading, spacing: 8) {
@@ -136,7 +169,6 @@ struct TripFormView: View {
                                         .scrollContentBackground(.hidden)
                                         .background(AppTheme.oceanLight.opacity(0.3))
                                         .cornerRadius(AppTheme.fieldRadius)
-                                        .colorScheme(.dark)
                                 }
                             }
 
@@ -151,7 +183,6 @@ struct TripFormView: View {
             .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(AppTheme.oceanDeep, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
@@ -184,6 +215,8 @@ struct TripFormView: View {
         hasDOTime    = t.hasDOTime;    if let v = t.dropoffTime  { dropoffTime  = v }
         hasLeftBase  = t.hasLeftBase;  if let v = t.timeLeftBase { timeLeftBase = v }
         hasBackBase  = t.hasBackBase;  if let v = t.timeBackBase { timeBackBase = v }
+        isHighlighted = t.isHighlighted
+        showCountdown = t.showCountdown
     }
 
     // MARK: - Save
@@ -202,6 +235,8 @@ struct TripFormView: View {
         trip.hasDOTime    = hasDOTime;   trip.dropoffTime  = hasDOTime   ? dropoffTime  : nil
         trip.hasLeftBase  = hasLeftBase; trip.timeLeftBase = hasLeftBase  ? timeLeftBase : nil
         trip.hasBackBase  = hasBackBase; trip.timeBackBase = hasBackBase  ? timeBackBase : nil
+        trip.isHighlighted = isHighlighted
+        trip.showCountdown = showCountdown
 
         if isEditing {
             store.updateTrip(trip, inPeriod: periodID)

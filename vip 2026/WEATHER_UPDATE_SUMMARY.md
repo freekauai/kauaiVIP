@@ -1,110 +1,70 @@
-# 🌤️ Weather Update Summary
+# 🌤️ Weather Implementation Summary
 
-## What Changed
-
-Your Live Weather page now shows comprehensive weather data for **4 key Kauai locations**:
-
-### Main Display (Lihue)
-- **Large temperature display** with weather icon
-- **Moon phase** with emoji and name
-- **Detailed conditions**: Wind, Humidity, UV Index, Visibility
-
-### Additional Locations
-Each location card shows:
-- **🏖️ Poipu** - Beach weather
-- **🌊 Hanalei** - North shore conditions  
-- **⛰️ Kokee** - Mountain weather
-
-### Data Per Location
-1. **Temperature** - Current temp in Fahrenheit
-2. **Wind Speed** - mph with direction
-3. **Surf Estimate** - Wave height (approximate, based on location and wind)
-4. **Condition** - Clear, cloudy, rain, etc.
+> **Status:** Fully migrated from WeatherKit → Open-Meteo (May 2026)
+> No API key, no entitlement, no Apple Developer account required.
 
 ---
 
-## Files Updated
+## What the Weather Screen Shows
 
-### 1. `WeatherManager.swift`
-- Added `KauaiLocation` struct for location data
-- Added `LocationWeather` struct to track weather per location
-- Added `kauaiLocations` array with 4 key Kauai spots
-- Added `moonPhase` tracking
-- Added `fetchAllLocations()` to fetch weather for all spots simultaneously
-- Added moon phase helpers: `moonPhaseEmoji` and `moonPhaseName`
+### Main Display (Lihue Airport — hardcoded coordinates)
 
-### 2. `WeatherModalView.swift`
-- Added moon phase card display
-- Added location weather cards for Poipu, Hanalei, and Kokee
-- Added `StatBox` component for compact data display
-- Added `surfEstimate()` helper for approximate wave heights
-- Updated footer with surf estimate disclaimer
+- Large temperature with weather icon
+- Condition text (Clear Sky, Partly Cloudy, Rain, etc.)
+- Hourly forecast strip (next 6 hours)
+- Moon phase with emoji + name (computed locally, no API)
+- Surf conditions (Open-Meteo Marine)
+- Conditions grid: Humidity · Wind · Visibility · Rain Chance · UV Index · Dew Point
+- Hanalei Bridge status (NOAA)
+- Driver advisory (generated from wind speed + WMO code + UV)
 
 ---
 
-## Surf Estimation Logic
+## Architecture
 
-The surf heights are **estimates** based on:
-- **Location**: North shore (Hanalei) typically has bigger waves
-- **Wind Speed**: Higher winds = bigger surf
-- **Base surf by location**:
-  - Hanalei (North): 4-6+ ft (bigger swells)
-  - Poipu (South): 2-4 ft (calmer)
-  - Lihue/Kokee: 1-3 ft (protected/inland)
+### WeatherManager.swift (Open-Meteo)
+- Fetches `api.open-meteo.com/v1/forecast` and `marine-api.open-meteo.com/v1/marine` in parallel
+- Uses hardcoded Lihue Airport coords: `21.9758, -159.3753`
+- Auto-refreshes every 5 minutes via `Timer`
+- Manual refresh has a 30-second throttle
+- All optional fields (visibility, dew point, UV, surf) reset to `"--"` before each fetch
+- Error state shown directly in the hero card; no silent failures
 
-> **Note**: For real surf reports, consider integrating a surf forecast API like Surfline or NOAA buoy data.
-
----
-
-## Moon Phase Display
-
-Shows the current lunar phase with:
-- 🌑 New Moon
-- 🌒 Waxing Crescent
-- 🌓 First Quarter
-- 🌔 Waxing Gibbous
-- 🌕 Full Moon
-- 🌖 Waning Gibbous
-- 🌗 Last Quarter
-- 🌘 Waning Crescent
+### WeatherModalView.swift
+- All weather data via `@EnvironmentObject var weatherManager: WeatherManager`
+- Shows `ProgressView` while loading, error text on failure, full data on success
+- No WeatherKit imports anywhere
 
 ---
 
-## How It Works
+## Why Open-Meteo Instead of WeatherKit
 
-1. **Main Weather** fetches for Lihue (default location)
-2. **Parallel Fetching** loads weather for all 4 locations simultaneously
-3. **Auto-refresh** every 15 minutes
-4. **Manual Refresh** via refresh button in toolbar
+WeatherKit requires:
+- A paid Apple Developer account ($99/yr)
+- WeatherKit entitlement enabled in your App ID on the Developer Portal
+- Provisioning profile updated after enabling the entitlement
+- Can fail with JWT auth errors on simulator
 
----
-
-## Future Enhancements
-
-Consider adding:
-- Real surf API integration (Surfline, NOAA buoys)
-- Tide information
-- UV alerts
-- Sunset/sunrise times
-- Weather alerts/warnings
-- Historical weather comparison
-- Extended forecast (7-10 days)
+Open-Meteo:
+- Free, no key, no account
+- Works identically on simulator and real device
+- No entitlement needed
+- Provides all the same data (temp, wind, humidity, UV, hourly, sunrise/sunset, marine)
 
 ---
 
-## Testing
+## Stale Files (Do Not Use)
 
-To test the new features:
-1. Open the Live Weather page
-2. You should see:
-   - Lihue main weather at top
-   - Moon phase card
-   - Wind/Humidity/UV/Visibility grid
-   - Three location cards (Poipu, Hanalei, Kokee)
-3. Tap refresh to reload all data
-4. Each location updates independently
+These files exist in the repository but are **NOT part of the Xcode project**:
+
+| File | Location | Status |
+|------|----------|--------|
+| `WeatherManager.swift` (WeatherKit) | `KauaiVIP2026/WeatherManager.swift` | Stale — uses `import WeatherKit` |
+| `WeatherModalView.swift` (WeatherKit) | `KauaiVIP2026/WeatherModalView.swift` | Stale — uses `import WeatherKit` |
+| `vip-2026.entitlements` | `vip 2026.xcodeproj/vip-2026.entitlements` | Stale — has WeatherKit key, not used by build |
+
+The **active** files used by the Xcode build are in `KauaiVIP2026/vip 2026/vip 2026/`.
 
 ---
 
-**Last Updated**: April 4, 2026  
-**WeatherKit Status**: Active (ensure capability is enabled)
+*Last Updated: May 2026*

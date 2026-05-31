@@ -36,7 +36,6 @@ struct CSVImportView: View {
             .navigationTitle("Import CSV")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(AppTheme.oceanDeep, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
@@ -96,12 +95,10 @@ struct CSVImportView: View {
                 DatePicker("Start Date", selection: $startDate,
                            displayedComponents: .date)
                     .foregroundColor(AppTheme.textPrimary)
-                    .colorScheme(.dark)
                 DatePicker("End Date", selection: $endDate,
                            in: startDate...,
                            displayedComponents: .date)
                     .foregroundColor(AppTheme.textPrimary)
-                    .colorScheme(.dark)
             }
         }
     }
@@ -153,24 +150,36 @@ struct CSVImportView: View {
             parseError = "Could not open file: \(err.localizedDescription)"
         case .success(let urls):
             guard let url = urls.first else { return }
-            let secured = url.startAccessingSecurityScopedResource()
-            defer { if secured { url.stopAccessingSecurityScopedResource() } }
+            // Read the file off the main thread to avoid blocking the UI.
+            Task {
+                let secured = url.startAccessingSecurityScopedResource()
+                // Bridge synchronous file I/O to the async world via a background queue.
+                let rawText: String? = await withCheckedContinuation { continuation in
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let text = try? String(contentsOf: url, encoding: .utf8)
+                        continuation.resume(returning: text)
+                    }
+                }
+                if secured { url.stopAccessingSecurityScopedResource() }
 
-            guard let text = try? String(contentsOf: url, encoding: .utf8) else {
-                parseError = "Could not read file — ensure it is a UTF-8 CSV."
-                return
-            }
+                guard let rawText else {
+                    parseError = "Could not read file — ensure it is a UTF-8 CSV."
+                    return
+                }
 
-            fileName = url.lastPathComponent
-            let (trips, error) = parseCSV(text)
-            if let error {
-                parseError = error
-            } else {
-                parsedTrips = trips
-                if let minDate = trips.map(\.date).min(),
-                   let maxDate = trips.map(\.date).max() {
-                    startDate = Calendar.current.startOfDay(for: minDate)
-                    endDate   = Calendar.current.startOfDay(for: maxDate)
+                let localName         = url.lastPathComponent
+                let (trips, csvError) = parseCSV(rawText)
+                // All state mutations happen on MainActor (Task inherits caller's actor context).
+                fileName = localName
+                if let csvError {
+                    parseError = csvError
+                } else {
+                    parsedTrips = trips
+                    if let minDate = trips.map(\.date).min(),
+                       let maxDate = trips.map(\.date).max() {
+                        startDate = Calendar.current.startOfDay(for: minDate)
+                        endDate   = Calendar.current.startOfDay(for: maxDate)
+                    }
                 }
             }
         }
@@ -197,30 +206,53 @@ struct CSVImportView: View {
         timeFmt.locale    = Locale(identifier: "en_US")
         timeFmt.dateFormat = "h:mm a"
 
+        // Parse a single date field against every supported format.
+        func tryDate(_ s: String) -> Date? {
+            let t = s.trimmingCharacters(in: .whitespaces)
+            guard !t.isEmpty else { return nil }
+            for fmt in ["MMM d, yyyy", "M/d/yyyy", "MM/dd/yyyy", "yyyy-MM-dd", "d MMM yyyy"] {
+                dateFmt.dateFormat = fmt
+                if let d = dateFmt.date(from: t) { return d }
+            }
+            return nil
+        }
+
         var trips: [Trip] = []
 
         for line in lines {
             let raw = splitCSVLine(line)
-            // Support 9-column (no Period) and 10-column (with Period prefix) exports
-            let off = raw.count >= 10 ? 1 : 0
-            guard raw.count >= 9 + off else { continue }
+            guard raw.count >= 9 else { continue }
 
-            let dateStr    = raw[0 + off]
-            let vehicleStr = raw[1 + off]
-            let serviceStr = raw[2 + off]
-            let clientStr  = raw[3 + off]
-            let puStr      = raw[4 + off]
-            let doStr      = raw[5 + off]
-            let lbStr      = raw[6 + off]
-            let bbStr      = raw[7 + off]
-            let notesStr   = raw.count > 8 + off ? raw[8 + off] : ""
-
+            // Locate the date column and the 8 trip columns that follow it.
+            // Tolerates an optional leading Period/Month column, and an
+            // abbreviated date ("MMM d, yyyy") that an older, buggy export
+            // wrote unquoted — its internal comma splits it across two fields.
             var tripDate: Date? = nil
-            for fmt in ["MMM d, yyyy", "M/d/yyyy", "MM/dd/yyyy", "yyyy-MM-dd", "d MMM yyyy"] {
-                dateFmt.dateFormat = fmt
-                if let d = dateFmt.date(from: dateStr) { tripDate = d; break }
+            var cols: [String]  = []   // vehicle, service, client, pu, do, lb, bb, notes
+            let candidates: [(Date?, Int)] = [
+                (tryDate(raw[0]), 1),                                            // date @ 0
+                raw.count > 1 ? (tryDate(raw[1]), 2)                : (nil, 0),  // Period prefix, date @ 1
+                raw.count > 1 ? (tryDate(raw[0] + ", " + raw[1]), 2): (nil, 0),  // comma-split date @ 0+1
+                raw.count > 2 ? (tryDate(raw[1] + ", " + raw[2]), 3): (nil, 0),  // prefix + comma-split date @ 1+2
+            ]
+            for (d, restStart) in candidates {
+                // Need at least vehicle…back-base (7); notes is optional.
+                if let d, raw.count - restStart >= 7 {
+                    tripDate = d
+                    cols = Array(raw[restStart...])
+                    break
+                }
             }
-            guard let tripDate else { continue }
+            guard let tripDate, cols.count >= 7 else { continue }
+
+            let vehicleStr = cols[0]
+            let serviceStr = cols[1]
+            let clientStr  = cols[2]
+            let puStr      = cols[3]
+            let doStr      = cols[4]
+            let lbStr      = cols[5]
+            let bbStr      = cols[6]
+            let notesStr   = cols.count > 7 ? cols[7] : ""
 
             let vehicle = Vehicle.allCases.first {
                 $0.rawValue.lowercased() == vehicleStr.lowercased()
@@ -231,7 +263,12 @@ struct CSVImportView: View {
 
             func parseTime(_ s: String) -> Date? {
                 guard s != "--", !s.isEmpty else { return nil }
-                guard let t = timeFmt.date(from: s) else { return nil }
+                // iOS `formatted()` separates the AM/PM marker with a narrow
+                // no-break space (U+202F); normalize so DateFormatter can parse.
+                let normalized = s
+                    .replacingOccurrences(of: "\u{202F}", with: " ")
+                    .replacingOccurrences(of: "\u{00A0}", with: " ")
+                guard let t = timeFmt.date(from: normalized) else { return nil }
                 let cal   = Calendar.current
                 var comps = cal.dateComponents([.year, .month, .day], from: tripDate)
                 comps.hour   = cal.component(.hour,   from: t)
@@ -306,9 +343,10 @@ struct CSVImportView: View {
             parseError = "End date must be on or after start date."
             return
         }
-        let dayCount = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
-        guard (13...16).contains(dayCount) else {
-            parseError = "Pay periods should be 14–16 days (\(dayCount + 1) days selected). Adjust the start or end date."
+        // Use day + 1 (inclusive count) — same logic as NewPeriodView.
+        let dayCount = (Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0) + 1
+        guard (14...16).contains(dayCount) else {
+            parseError = "Pay periods should be 14–16 days (\(dayCount) days selected). Adjust the start or end date."
             return
         }
         var period   = PayPeriod(startDate: startDate, endDate: endDate)

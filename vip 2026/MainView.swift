@@ -3,6 +3,7 @@
 // ║           MainView.swift                                     ║
 // ╚══════════════════════════════════════════════════════════════╝
 
+import Combine
 import SwiftUI
 
 struct MainView: View {
@@ -14,8 +15,36 @@ struct MainView: View {
 
     @State private var showNewPeriod     = false
     @State private var showCSVImport     = false
+    @State private var showSettings      = false
+    @State private var periodToDelete:   PayPeriod? = nil
+    @State private var showDeletePeriodAlert = false
     @State private var selectedPeriod:   PayPeriod? = nil
     @State private var didAutoNavigate   = false
+    @State private var now               = Date()
+
+    @AppStorage("countdownEnabled") private var countdownEnabled: Bool = true
+
+    private let mainTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    /// The soonest upcoming departure time across ALL active trips in all periods.
+    private var nextGlobalTripTime: Date? {
+        store.periods
+            .flatMap(\.trips)
+            .filter { $0.isActive }
+            .compactMap { $0.earliestEnteredTime }
+            .filter { $0 > now }
+            .min()
+    }
+
+    private func globalCountdownLabel() -> String? {
+        guard let target = nextGlobalTripTime else { return nil }
+        let interval = target.timeIntervalSince(now)
+        guard interval > 0 else { return nil }
+        let h = Int(interval) / 3600
+        let m = (Int(interval) % 3600) / 60
+        if h > 0 { return "\(h)h \(m)m" }
+        return "\(m)m"
+    }
 
 
     var body: some View {
@@ -73,6 +102,8 @@ struct MainView: View {
                 didAutoNavigate = true
                 selectedPeriod = newest
             }
+            .onReceive(mainTimer) { now = $0 }
+            .onDisappear { mainTimer.upstream.connect().cancel() }
             .navigationDestination(item: $selectedPeriod) { period in
                 PeriodDetailView(periodID: period.id, activeModal: $activeModal)
             }
@@ -81,6 +112,18 @@ struct MainView: View {
             }
             .sheet(isPresented: $showCSVImport) {
                 CSVImportView().environmentObject(store)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+                    .environmentObject(store)
+            }
+            .alert("Delete Period?", isPresented: $showDeletePeriodAlert, presenting: periodToDelete) { period in
+                Button("Delete", role: .destructive) {
+                    store.deletePeriod(period)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { period in
+                Text("Remove “\(period.label)” and all \(period.trips.count) trips? This cannot be undone.")
             }
         }
     }
@@ -97,10 +140,29 @@ struct MainView: View {
                 .foregroundColor(AppTheme.coral)
                 .tracking(5)
             if !store.driverName.isEmpty {
-                Text(store.driverName)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(AppTheme.textPrimary)
+                if countdownEnabled, let cd = globalCountdownLabel() {
+                    HStack(spacing: 8) {
+                        Text(store.displayName)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(AppTheme.textPrimary)
+                        Text("|")
+                            .foregroundColor(AppTheme.textTertiary)
+                        HStack(spacing: 4) {
+                            Image(systemName: "timer")
+                                .font(.system(size: 13))
+                                .foregroundColor(AppTheme.coral)
+                            Text("Next: \(cd)")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(AppTheme.coral)
+                        }
+                    }
                     .padding(.top, 4)
+                } else {
+                    Text(store.displayName)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(AppTheme.textPrimary)
+                        .padding(.top, 4)
+                }
             }
             Text("Driver Timesheet System")
                 .font(.system(size: 13))
@@ -201,6 +263,13 @@ struct MainView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(AppTheme.coral)
                 }
+                Button(action: { showSettings = true }) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(AppTheme.textTertiary)
+                }
+                .padding(.leading, 8)
+                .accessibilityLabel("Settings")
             }
             .padding(.horizontal, AppTheme.screenPad)
             .padding(.top, AppTheme.sectionSpacing)
@@ -216,11 +285,20 @@ struct MainView: View {
                 ForEach(store.periods) { period in
                     PeriodCard(period: period)
                         .onTapGesture { selectedPeriod = period }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                periodToDelete = period
+                                showDeletePeriodAlert = true
+                            } label: {
+                                Label("Delete Period", systemImage: "trash")
+                            }
+                        }
                         .padding(.horizontal, AppTheme.screenPad)
                         .padding(.bottom, AppTheme.elemSpacing)
                 }
             }
 
+            AppFooter()
         }
     }
 }

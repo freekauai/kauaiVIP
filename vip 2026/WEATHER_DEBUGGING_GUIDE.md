@@ -1,170 +1,113 @@
-# 🐛 Weather Data Debugging Guide
+# 🐛 Weather Debugging Guide
 
-## Issue: Missing UV Index, Visibility, and Humidity
+> **Note:** This app uses **Open-Meteo**, not WeatherKit.
+> No API key, no entitlement, no Apple Developer account required for weather.
 
-### What I've Added
+---
 
-#### 1. **Debug Logging** in `WeatherManager.swift`
-When weather is fetched, you'll now see console output like:
-```
-🌤️ Weather fetched successfully
-   Temperature: 82.0°F
-   Condition: Partly Cloudy
-   Humidity: 0.68
-   UV Index: UVIndex(value: 7, category: .high)
-   Visibility: 10.0 mi
-   Wind: 12.5 mph
-```
+## Current Architecture
 
-#### 2. **Better Error Handling**
-- Shows "--" or "N/A" when data is unavailable
-- Prints warnings in console when specific metrics are missing
-- Error state display in UI
-
-#### 3. **Loading States**
-- Shows spinner while fetching weather
-- Shows error message if fetch fails
+| Component | Technology | Notes |
+|-----------|-----------|-------|
+| Weather data | [Open-Meteo](https://open-meteo.com) | Free, no key, works on simulator |
+| Marine / surf | Open-Meteo Marine API | Free, same origin |
+| Moon phase | Synodic calculation | No API — computed locally |
+| Location | Hardcoded Lihue Airport (21.9758, -159.3753) | No CLLocationManager needed |
 
 ---
 
 ## How to Debug
 
-### Step 1: Check the Xcode Console
-After opening the weather page, look for these messages:
+### Step 1: Check the error banner in the UI
+When a fetch fails, the weather hero card shows a red error message instead of the temperature.
+The error text comes directly from `URLError.localizedDescription`.
 
-**✅ Success:**
-```
-🌤️ Weather fetched successfully
-```
+### Step 2: Check network access
+Open-Meteo is a free public API — no auth, no rate limits for normal usage.
 
-**❌ Failure:**
 ```
-❌ Weather fetch error: [error details]
-```
-
-**⚠️ Missing Data:**
-```
-⚠️ Humidity unavailable
-⚠️ UV Index unavailable
-⚠️ Visibility unavailable
+https://api.open-meteo.com/v1/forecast     ← weather
+https://marine-api.open-meteo.com/v1/marine ← surf
 ```
 
-### Step 2: Verify WeatherKit Capability
-1. **Xcode** → Select project → Target → **Signing & Capabilities**
-2. Verify **WeatherKit** is listed
-3. If not, click **+ Capability** → Add **WeatherKit**
+Both must be reachable. Check:
+- Device/simulator has internet access
+- No corporate VPN or firewall blocking `open-meteo.com`
 
-### Step 3: Check Apple Developer Portal
-1. Go to [developer.apple.com](https://developer.apple.com/account)
-2. **Certificates, Identifiers & Profiles** → **Identifiers**
-3. Select your App ID
-4. Verify **WeatherKit** is ✅ enabled
-5. If changed, regenerate provisioning profile in Xcode
+### Step 3: Try the refresh button
+The refresh button (↻) in the weather sheet toolbar triggers a new fetch.
+It has a 30-second throttle — rapid taps within that window are silently ignored.
 
-### Step 4: Check Location Permissions
-1. Run the app
-2. When prompted, allow location access
-3. Or: Settings → Your App → Location → "While Using"
-
-### Step 5: Test on Real Device
-WeatherKit can behave differently on simulators vs real devices:
-- **Simulator**: May have limited/cached data
-- **Real Device**: Full live weather data
+### Step 4: Run on simulator vs real device
+Open-Meteo works identically on simulator and real device because it uses hardcoded
+coordinates, not GPS. Simulator limitations do **not** affect weather data.
 
 ---
 
-## Common Causes
+## Common Symptoms & Fixes
 
-### 1. **WeatherKit Not Enabled**
-**Symptom:** JWT authentication error  
-**Fix:** Enable WeatherKit in Developer Portal + Xcode
+### "Weather unavailable" error in the UI
+- **Cause:** Network request to `api.open-meteo.com` failed
+- **Fix:** Check internet connection. Try refreshing.
 
-### 2. **No Location Permission**
-**Symptom:** Shows "--" for all values  
-**Fix:** Grant location permission in Settings
+### All fields show "--" after loading
+- **Cause:** Fetch failed before data was applied (error state)
+- **Fix:** Check `fetchError` property — it will contain the error message
 
-### 3. **Network Issues**
-**Symptom:** "Weather unavailable" error  
-**Fix:** Check internet connection
+### Surf fields (wave height, period) show "--"
+- **Cause:** Marine API fetch failed (it's separate from the weather fetch)
+- **Note:** The marine fetch is fire-and-forget — a marine failure does NOT block weather data
 
-### 4. **Simulator Limitations**
-**Symptom:** Partial data available  
-**Fix:** Test on real device
+### UV Index shows "--"
+- **Cause:** `uv_index` is optional in Open-Meteo; it can be `null` at night or for some locations
+- **This is normal** — the advisory logic uses 0 (no UV warning) when unavailable
 
-### 5. **Data Not Available from WeatherKit**
-**Symptom:** Console shows specific metrics unavailable  
-**Fix:** This is normal for some locations/conditions
-
----
-
-## What Data Comes From WeatherKit
-
-| Metric | Always Available? | Notes |
-|--------|-------------------|-------|
-| Temperature | ✅ Yes | Core metric |
-| Condition | ✅ Yes | Core metric |
-| Wind | ✅ Yes | Speed + direction |
-| Humidity | ⚠️ Usually | May be unavailable in rare cases |
-| UV Index | ⚠️ Usually | Depends on time of day |
-| Visibility | ⚠️ Usually | May not be available everywhere |
-| Moon Phase | ✅ Yes | From daily forecast |
+### Visibility shows "--"
+- **Cause:** `visibility` is optional in Open-Meteo response
+- **This is normal** for some atmospheric conditions
 
 ---
 
-## Expected Console Output
+## What Data Comes From Open-Meteo
 
-### Successful Weather Fetch:
-```
-🌤️ Weather fetched successfully
-   Temperature: 82.0°F
-   Condition: Partly Cloudy
-   Humidity: 0.68
-   UV Index: UVIndex(value: 7, category: .high)
-   Visibility: Measurement<UnitLength>(value: 16093.44, unit: m)
-   Wind: 12.5 mph
+| Metric | Field in API | Optional? |
+|--------|-------------|-----------|
+| Temperature | `current.temperature_2m` | No |
+| Humidity | `current.relative_humidity_2m` | No |
+| Wind speed + direction | `current.wind_speed_10m`, `current.wind_direction_10m` | No |
+| Precipitation chance | `current.precipitation_probability` | No |
+| Weather code → condition + icon | `current.weather_code` | No |
+| Visibility | `current.visibility` | Yes — can be null |
+| Dew point | `current.dew_point_2m` | Yes — can be null |
+| UV index | `current.uv_index` | Yes — null at night |
+| Sunrise / sunset | `daily.sunrise`, `daily.sunset` | No |
+| Hourly forecast (6 hours) | `hourly.*` | No |
+| Wave height, period, direction | Marine API | Optional — separate fetch |
+| Swell height, period | Marine API | Optional — separate fetch |
 
-🌤️ Weather fetched successfully (for Poipu)
-🌤️ Weather fetched successfully (for Hanalei)
-🌤️ Weather fetched successfully (for Kokee)
-```
+---
 
-### Missing Data:
-```
-🌤️ Weather fetched successfully
-   [data shown]
-⚠️ UV Index unavailable
-⚠️ Visibility unavailable
-```
+## No Entitlements or Capabilities Needed
 
-### Complete Failure:
-```
-❌ Weather fetch error: The operation couldn't be completed. (WeatherDaemon.WDSJWTAuthenticatorServiceListener.Errors error 2.)
-```
-*This means WeatherKit isn't properly configured*
+The Xcode target entitlements file (`vip 2026.entitlements`) is intentionally **empty**.
+
+- ❌ No WeatherKit capability
+- ❌ No location permission (`NSLocationWhenInUseUsageDescription` not required)
+- ❌ No paid Apple Developer account required to build/run weather features
+
+> There is a stale `vip-2026.entitlements` inside the `.xcodeproj` folder that still contains
+> `com.apple.developer.weatherkit = true`. That file is **not referenced** by the build
+> (the build uses `vip 2026/vip 2026.entitlements`). It is safe to ignore.
 
 ---
 
 ## Quick Checklist
 
-- [ ] WeatherKit capability added in Xcode
-- [ ] WeatherKit enabled in Developer Portal
-- [ ] Location permission granted
 - [ ] Internet connection active
-- [ ] Testing on real device (not just simulator)
-- [ ] Clean build after changes (`Cmd + Shift + K`)
-- [ ] Check Xcode console for debug output
+- [ ] App can reach `api.open-meteo.com` (not blocked by firewall/VPN)
+- [ ] No `import WeatherKit` anywhere in project source files
+- [ ] Using `WeatherManager.swift` (Open-Meteo version) — header should say "Uses Open-Meteo"
 
 ---
 
-## Next Steps
-
-1. **Run the app** and open the weather page
-2. **Check Xcode console** for debug output
-3. **Take a screenshot** of the console if data is missing
-4. **Share the console output** to diagnose the exact issue
-
-The debug logging will tell us exactly which data points are available from WeatherKit!
-
----
-
-**Last Updated:** April 4, 2026
+*Last Updated: May 2026 — migrated from WeatherKit to Open-Meteo*

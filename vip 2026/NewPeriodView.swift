@@ -41,7 +41,6 @@ struct NewPeriodView: View {
                                         .datePickerStyle(.compact)
                                         .labelsHidden()
                                         .tint(AppTheme.coral)
-                                        .colorScheme(.dark)
                                         .onChange(of: startDate) { _, newDate in
                                             endDate = Calendar.current.date(byAdding: .day, value: 14, to: newDate) ?? endDate
                                         }
@@ -60,7 +59,6 @@ struct NewPeriodView: View {
                                         .datePickerStyle(.compact)
                                         .labelsHidden()
                                         .tint(AppTheme.coral)
-                                        .colorScheme(.dark)
                                 }
                             }
                         }
@@ -104,7 +102,6 @@ struct NewPeriodView: View {
             .navigationTitle("New Pay Period")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(AppTheme.oceanDeep, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }

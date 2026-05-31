@@ -19,9 +19,17 @@ struct PeriodDetailView: View {
     @State private var editingTrip: Trip? = nil
     @State private var tripToDelete: Trip? = nil
     @State private var showDeleteAlert = false
+    @State private var showDeletePeriodAlert = false
     @State private var now = Date()
 
-    private let tripTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+    // Undo toast for isActive toggle (issue #10)
+    @State private var undoableTrip: Trip? = nil
+
+    // Global countdown on/off — shared across views via @AppStorage
+    @AppStorage("countdownEnabled") private var countdownEnabled: Bool = true
+
+    // 1-second timer drives both LIVE badge and countdown displays
+    private let tripTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     // Derive period from store so updates are live
     private var period: PayPeriod? {
@@ -49,6 +57,7 @@ struct PeriodDetailView: View {
                             driverHeader
                             summaryCard(period: period)
                             tripsSection(period: period)
+                            AppFooter()
                         }
                         .padding(.bottom, 100)
                     }
@@ -74,7 +83,6 @@ struct PeriodDetailView: View {
         .navigationTitle(period?.label ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(AppTheme.oceanDeep, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
@@ -84,14 +92,51 @@ struct PeriodDetailView: View {
                     Button(action: exportCSV) {
                         Label("Export CSV", systemImage: "tablecells")
                     }
+                    Divider()
+                    Button(role: .destructive) {
+                        showDeletePeriodAlert = true
+                    } label: {
+                        Label("Delete Period", systemImage: "trash")
+                    }
                 } label: {
-                    Image(systemName: "square.and.arrow.up")
+                    Image(systemName: "ellipsis.circle")
                         .foregroundColor(AppTheme.coral)
                 }
             }
         }
+        // `tripTimer` is an .autoconnect() publisher: Combine connects it when
+        // this view subscribes and tears it down when the subscription ends.
+        // Do NOT manually connect/cancel the upstream — doing so permanently
+        // kills the timer so it never resumes when the view reappears.
         .onReceive(tripTimer) { now = $0 }
-        .onDisappear { tripTimer.upstream.connect().cancel() }
+        // Undo toast overlay
+        .overlay(alignment: .bottom) {
+            if let ut = undoableTrip {
+                HStack(spacing: 12) {
+                    Image(systemName: ut.isActive ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(ut.isActive ? AppTheme.success : AppTheme.textTertiary)
+                    Text(ut.isActive ? "Trip activated" : "Trip deactivated")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(AppTheme.textPrimary)
+                    Spacer()
+                    Button("Undo") {
+                        withAnimation { undoableTrip = nil }
+                        store.updateTrip(ut, inPeriod: periodID)
+                    }
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(AppTheme.coral)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(AppTheme.oceanMedium)
+                .cornerRadius(12)
+                .shadow(color: .black.opacity(0.35), radius: 10, x: 0, y: 4)
+                .padding(.horizontal, AppTheme.screenPad)
+                .padding(.bottom, 90)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: undoableTrip?.id)
         .sheet(isPresented: $showAddTrip) {
             TripFormView(periodID: periodID, existingTrip: nil)
         }
@@ -106,16 +151,42 @@ struct PeriodDetailView: View {
         } message: { trip in
             Text("Remove \(trip.service.rawValue) trip for \(trip.clientName)? This cannot be undone.")
         }
+        .alert("Delete Period?", isPresented: $showDeletePeriodAlert) {
+            Button("Delete", role: .destructive) {
+                if let p = period { store.deletePeriod(p) }
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Remove “\(period?.label ?? "this period")” and all \(period?.trips.count ?? 0) trips? This cannot be undone.")
+        }
     }
 
     // MARK: - Driver Header
     private var driverHeader: some View {
-        Text(store.driverName)
-            .font(.system(size: 28, weight: .black, design: .rounded))
-            .foregroundColor(AppTheme.oceanDeep)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(AppTheme.success)
+        ZStack {
+            HStack(spacing: 0) {
+                Spacer()
+                VStack(spacing: 4) {
+                    Text(store.displayName)
+                        .font(.system(size: 28, weight: .black, design: .rounded))
+                        .foregroundColor(AppTheme.oceanDeep)
+
+                    // Next-trip countdown for this period
+                    if countdownEnabled, let nextTime = nextUpTripTime {
+                        if nextTime > now {
+                            Text("Next: \(countdownLabel(now: now, target: nextTime))")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(AppTheme.oceanDeep.opacity(0.7))
+                        }
+                    }
+                }
+                Spacer()
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(AppTheme.success)
     }
 
     // MARK: - Summary Card
@@ -141,14 +212,13 @@ struct PeriodDetailView: View {
     }
 
     // MARK: - Next-Up Trip ID
-    /// The ID of the soonest future trip that isn't currently active.
-    /// Prefers trips with an explicit future start time; falls back to
-    /// trips on today or a future date when no times are logged.
+    /// The ID of the soonest future *active* trip that isn't currently live.
     private var nextUpTripID: UUID? {
         guard let period = period else { return nil }
         let cal   = Calendar.current
         let today = cal.startOfDay(for: now)
-        let candidates = period.trips.filter { !$0.isActive(at: now) }
+        // Only consider user-enabled trips that aren't currently live
+        let candidates = period.trips.filter { $0.isActive && !$0.isLive(at: now) }
 
         // 1. Prefer explicit future start times
         let timed = candidates.compactMap { trip -> (UUID, Date)? in
@@ -164,6 +234,28 @@ struct PeriodDetailView: View {
             return day >= today ? (trip.id, day) : nil
         }
         return byDate.min(by: { $0.1 < $1.1 })?.0
+    }
+
+    /// The earliest departure time of the soonest upcoming active trip (for the header countdown).
+    private var nextUpTripTime: Date? {
+        guard let period = period else { return nil }
+        return period.trips
+            .filter { $0.isActive && !$0.isLive(at: now) }
+            .compactMap { $0.earliestEnteredTime }
+            .filter { $0 > now }
+            .min()
+    }
+
+    // MARK: - Countdown Formatter
+    private func countdownLabel(now: Date, target: Date) -> String {
+        let interval = target.timeIntervalSince(now)
+        guard interval > 0 else { return "Departed" }
+        let h = Int(interval) / 3600
+        let m = (Int(interval) % 3600) / 60
+        let s = Int(interval) % 60
+        if h > 0 { return "\(h)h \(m)m" }
+        if m > 0 { return "\(m)m \(s)s" }
+        return "\(s)s"
     }
 
     // MARK: - Trips Section
@@ -189,13 +281,30 @@ struct PeriodDetailView: View {
                     return timeA > timeB
                 }
                 ForEach(sorted) { trip in
-                    TripCard(trip: trip,
-                             isActive: trip.isActive(at: now),
-                             isNextUp: trip.id == nextUp,
-                             onEdit:   { editingTrip = trip },
-                             onDelete: { tripToDelete = trip; showDeleteAlert = true })
-                        .padding(.horizontal, AppTheme.screenPad)
-                        .padding(.bottom, AppTheme.elemSpacing)
+                    TripCard(
+                        trip:             trip,
+                        isLive:           trip.isLive(at: now),
+                        isNextUp:         trip.id == nextUp,
+                        countdownEnabled: countdownEnabled,
+                        now:              now,
+                        onEdit:           { editingTrip = trip },
+                        onDelete:         { tripToDelete = trip; showDeleteAlert = true },
+                        onToggleActive:   {
+                            let prevState = trip   // capture pre-toggle version for undo
+                            var updated   = trip
+                            updated.isActive.toggle()
+                            store.updateTrip(updated, inPeriod: periodID)
+                            // Show undo toast; prevState carries the original isActive value.
+                            withAnimation { undoableTrip = prevState }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                withAnimation {
+                                    if undoableTrip?.id == prevState.id { undoableTrip = nil }
+                                }
+                            }
+                        }
+                    )
+                    .padding(.horizontal, AppTheme.screenPad)
+                    .padding(.bottom, AppTheme.elemSpacing)
                 }
             }
         }
@@ -205,7 +314,7 @@ struct PeriodDetailView: View {
     private func exportPDF() {
         guard let period = period else { return }
         let safe = period.label.replacingOccurrences(of: " ", with: "_")
-        shareFile(data: period.pdfData(driverName: store.driverName),
+        shareFile(data: period.pdfData(driverName: store.displayName),
                   filename: "KauaiVIP_\(safe).pdf")
     }
 
@@ -240,14 +349,34 @@ private struct SummaryMetric: View {
 
 // MARK: - Trip Card
 struct TripCard: View {
-    let trip:     Trip
-    var isActive: Bool = false
-    var isNextUp: Bool = false
-    let onEdit:   () -> Void
-    let onDelete: () -> Void
+    let trip:             Trip
+    var isLive:           Bool      = false   // currently in-progress window
+    var isNextUp:         Bool      = false
+    var countdownEnabled: Bool      = false
+    var now:              Date      = Date()
+    let onEdit:           () -> Void
+    let onDelete:         () -> Void
+    let onToggleActive:   () -> Void
 
-    private var highlightColor: Color {
-        AppTheme.success
+    /// Gold highlight (border + star) shows whenever the user enables the
+    /// per-trip Highlight toggle in the edit form. This gold border is the
+    /// only card emphasis — there is no green border.
+    private var isHighlightedNow: Bool { trip.isHighlighted }
+
+    /// Countdown string to the trip's earliest entered time. Shown whenever the
+    /// user enables the per-trip Countdown toggle and the trip has a future
+    /// time. Past trips show nothing.
+    private var countdownText: String? {
+        guard trip.showCountdown,
+              let target = trip.earliestEnteredTime else { return nil }
+        let interval = target.timeIntervalSince(now)
+        guard interval > 0 else { return nil }       // past trips: no "Departed" noise
+        let h = Int(interval) / 3600
+        let m = (Int(interval) % 3600) / 60
+        let s = Int(interval) % 60
+        if h > 0 { return "\(h)h \(m)m" }
+        if m > 0 { return "\(m)m \(s)s" }
+        return "\(s)s"
     }
 
     var body: some View {
@@ -275,13 +404,28 @@ struct TripCard: View {
                         Text(trip.service.rawValue)
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(AppTheme.textPrimary)
-                        if isActive {
+                        if isHighlightedNow {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(AppTheme.warning)
+                                .accessibilityLabel("Highlighted")
+                        }
+                        if isLive {
                             Text("LIVE")
                                 .font(.system(size: 9, weight: .bold))
                                 .foregroundColor(.black)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 2)
                                 .background(AppTheme.success)
+                                .cornerRadius(4)
+                        }
+                        if !trip.isActive {
+                            Text("INACTIVE")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(AppTheme.textTertiary)
                                 .cornerRadius(4)
                         }
                     }
@@ -311,14 +455,38 @@ struct TripCard: View {
 
                 Spacer()
 
-                // Edit / Delete
-                VStack(spacing: 10) {
+                // Countdown clock + action buttons (top-right)
+                VStack(alignment: .trailing, spacing: 10) {
+                    // Live countdown to this trip's first time
+                    if let cd = countdownText {
+                        HStack(spacing: 3) {
+                            Image(systemName: "timer").font(.system(size: 9))
+                            Text(cd)
+                                .font(.system(size: 12, weight: .bold))
+                                .monospacedDigit()
+                        }
+                        .foregroundColor(AppTheme.coral)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(AppTheme.coral.opacity(0.15))
+                        .cornerRadius(6)
+                    }
+
+                    // Active/Inactive toggle
+                    Button(action: onToggleActive) {
+                        Image(systemName: trip.isActive ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 16))
+                            .foregroundColor(trip.isActive ? AppTheme.success : AppTheme.textTertiary)
+                    }
+                    .accessibilityLabel(trip.isActive ? "Deactivate trip" : "Activate trip")
+
                     Button(action: onEdit) {
                         Image(systemName: "pencil")
                             .font(.system(size: 14))
                             .foregroundColor(AppTheme.coral)
                     }
                     .accessibilityLabel("Edit trip for \(trip.clientName)")
+
                     Button(action: onDelete) {
                         Image(systemName: "trash")
                             .font(.system(size: 14))
@@ -328,13 +496,16 @@ struct TripCard: View {
                 }
             }
         }
+        .opacity(trip.isActive ? 1.0 : 0.4)
         .overlay(
             RoundedRectangle(cornerRadius: AppTheme.cardRadius)
-                .stroke(highlightColor, lineWidth: (isActive || isNextUp) ? 1.5 : 0)
+                .stroke(AppTheme.warning, lineWidth: isHighlightedNow ? 1.5 : 0)
         )
-        .shadow(color: (isActive || isNextUp) ? highlightColor.opacity(0.35) : .clear, radius: 8, x: 0, y: 0)
-        .animation(.easeInOut(duration: 0.4), value: isActive)
+        .shadow(color: isHighlightedNow ? AppTheme.warning.opacity(0.35) : .clear, radius: 8, x: 0, y: 0)
+        .animation(.easeInOut(duration: 0.4), value: isLive)
         .animation(.easeInOut(duration: 0.4), value: isNextUp)
+        .animation(.easeInOut(duration: 0.3), value: trip.isActive)
+        .animation(.easeInOut(duration: 0.3), value: trip.isHighlighted)
     }
 }
 
