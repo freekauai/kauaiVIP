@@ -137,7 +137,8 @@ private struct SunCountdownRow: View {
 /// The blue band with the driver's name (plus optional next-trip countdown)
 /// shown directly under the top strip — identical on every page.
 struct DriverBand: View {
-    let name: String
+    let name: String                 // driver name — always primary
+    var company: String? = nil       // company name — subline under the driver
     var countdown: String? = nil
 
     var body: some View {
@@ -148,6 +149,15 @@ struct DriverBand: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .padding(.horizontal, 12)
+
+            if let company {
+                Text(company)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(AppTheme.oceanDeep.opacity(0.8))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .padding(.horizontal, 12)
+            }
 
             if let countdown {
                 Text("Next: \(countdown)")

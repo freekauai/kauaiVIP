@@ -141,7 +141,8 @@ struct MainView: View {
         // Same blue band as the trips page — the top of every page is
         // identical down through the driver's name.
         DriverBand(
-            name: store.displayName,
+            name: store.driverName,
+            company: store.companyName.isEmpty ? nil : store.companyName,
             countdown: countdownEnabled ? globalCountdownLabel() : nil
         )
     }

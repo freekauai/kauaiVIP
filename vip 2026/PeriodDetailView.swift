@@ -186,7 +186,11 @@ struct PeriodDetailView: View {
             guard countdownEnabled, let t = nextUpTripTime, t > now else { return nil }
             return countdownLabel(now: now, target: t)
         }()
-        return DriverBand(name: store.displayName, countdown: cd)
+        return DriverBand(
+            name: store.driverName,
+            company: store.companyName.isEmpty ? nil : store.companyName,
+            countdown: cd
+        )
     }
 
     // MARK: - Summary Card
