@@ -323,7 +323,8 @@ struct PeriodDetailView: View {
     private func exportPDF() {
         guard let period = period else { return }
         let safe = period.label.replacingOccurrences(of: " ", with: "_")
-        shareFile(data: period.pdfData(driverName: store.displayName),
+        shareFile(data: period.pdfData(driverName: store.driverName,
+                                       companyName: store.companyName),
                   filename: "RunSheet_\(safe).pdf")
     }
 

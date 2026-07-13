@@ -261,7 +261,7 @@ struct PayPeriod: Identifiable, Codable, Hashable {
 
 // MARK: - PDF Export Helper
 extension PayPeriod {
-    func pdfData(driverName: String) -> Data {
+    func pdfData(driverName: String, companyName: String = "") -> Data {
         let pageW:    CGFloat = 612
         let pageH:    CGFloat = 792
         let margin:   CGFloat = 36
@@ -306,22 +306,29 @@ extension PayPeriod {
                          font: .systemFont(ofSize: 10, weight: .semibold),
                          color: UIColor.white.withAlphaComponent(0.55), width: contentW)
 
-            // Driver name — prominent
+            // Driver name — always the prominent headline
             let name = driverName.isEmpty ? "Driver Report" : driverName
             _ = drawText(name, in: ctx, at: CGPoint(x: margin, y: 30),
                          font: .systemFont(ofSize: 26, weight: .bold),
                          color: .white, width: contentW)
 
+            // Company name — its own line under the driver
+            if !companyName.isEmpty {
+                _ = drawText(companyName, in: ctx, at: CGPoint(x: margin, y: 60),
+                             font: .systemFont(ofSize: 13, weight: .semibold),
+                             color: UIColor.white.withAlphaComponent(0.85), width: contentW)
+            }
+
             // Subtitle
             _ = drawText("Driver Timesheet Report  •  \(self.label)", in: ctx,
-                         at: CGPoint(x: margin, y: 68),
+                         at: CGPoint(x: margin, y: companyName.isEmpty ? 68 : 78),
                          font: .systemFont(ofSize: 12, weight: .medium),
                          color: UIColor.white.withAlphaComponent(0.82), width: contentW)
 
             // Generated date
             let df = DateFormatter(); df.dateStyle = .long; df.timeStyle = .short
             _ = drawText("Generated: \(df.string(from: Date()))", in: ctx,
-                         at: CGPoint(x: margin, y: 90),
+                         at: CGPoint(x: margin, y: companyName.isEmpty ? 90 : 96),
                          font: .systemFont(ofSize: 9),
                          color: UIColor.white.withAlphaComponent(0.5), width: contentW)
 
@@ -537,7 +544,7 @@ func formatDurationHM(_ seconds: Double) -> String {
 // MARK: - Stats PDF Export Helper
 /// Generates a multi-section PDF for Stats exports (All Time / Periods / Monthly).
 /// Each element of `sections` is a (sectionTitle, trips) pair.
-func makeStatsPDF(title: String, sections: [(String, [Trip])], driverName: String) -> Data {
+func makeStatsPDF(title: String, sections: [(String, [Trip])], driverName: String, companyName: String = "") -> Data {
     let pageW:    CGFloat = 612
     let pageH:    CGFloat = 792
     let margin:   CGFloat = 36
@@ -599,13 +606,20 @@ func makeStatsPDF(title: String, sections: [(String, [Trip])], driverName: Strin
                      font: .systemFont(ofSize: 26, weight: .bold),
                      color: .white, width: contentW)
 
-        _ = drawText(title, in: ctx, at: CGPoint(x: margin, y: 68),
+        // Company name — its own line under the driver
+        if !companyName.isEmpty {
+            _ = drawText(companyName, in: ctx, at: CGPoint(x: margin, y: 60),
+                         font: .systemFont(ofSize: 13, weight: .semibold),
+                         color: UIColor.white.withAlphaComponent(0.85), width: contentW)
+        }
+
+        _ = drawText(title, in: ctx, at: CGPoint(x: margin, y: companyName.isEmpty ? 68 : 78),
                      font: .systemFont(ofSize: 12, weight: .medium),
                      color: UIColor.white.withAlphaComponent(0.82), width: contentW)
 
         let df = DateFormatter(); df.dateStyle = .long; df.timeStyle = .short
         _ = drawText("Generated: \(df.string(from: Date()))", in: ctx,
-                     at: CGPoint(x: margin, y: 90),
+                     at: CGPoint(x: margin, y: companyName.isEmpty ? 90 : 96),
                      font: .systemFont(ofSize: 9),
                      color: UIColor.white.withAlphaComponent(0.5), width: contentW)
 

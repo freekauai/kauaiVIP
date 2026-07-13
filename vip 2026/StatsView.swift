@@ -92,7 +92,8 @@ struct StatsView: View {
         let data = makeStatsPDF(
             title: "\(scope.rawValue) Report",
             sections: sections,
-            driverName: store.displayName
+            driverName: store.driverName,
+            companyName: store.companyName
         )
         shareFile(data: data, filename: filename)
     }
