@@ -178,9 +178,17 @@ class TimesheetStore: ObservableObject {
 
     private func load() {
         // 1. Try Documents file (primary storage)
-        if let data    = try? Data(contentsOf: periodsFileURL),
-           let decoded = try? JSONDecoder().decode([PayPeriod].self, from: data) {
-            periods = decoded
+        if let data = try? Data(contentsOf: periodsFileURL) {
+            if let decoded = try? JSONDecoder().decode([PayPeriod].self, from: data) {
+                periods = decoded
+            } else {
+                // File exists but won't decode (partial write / future schema).
+                // Preserve it before any save() can overwrite the user's history.
+                let backup = periodsFileURL.deletingPathExtension()
+                    .appendingPathExtension("corrupt.bak.json")
+                try? data.write(to: backup, options: .atomic)
+                lastSaveError = "Couldn't read saved timesheets — a backup was kept as \(backup.lastPathComponent)."
+            }
         }
         // 2. Fall back to UserDefaults and migrate to Documents (runs once on upgrade)
         else if let data    = UserDefaults.standard.data(forKey: legacyPeriodsKey),

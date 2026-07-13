@@ -14,9 +14,9 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
 
     // Shared with KauaiVIP2026App.swift and PeriodDetailView.swift
-    @AppStorage("appTheme")          private var appTheme:          String = "system"
+    @AppStorage("appTheme")          private var appTheme:          String = "blueLight"
     @AppStorage("countdownEnabled")  private var countdownEnabled:  Bool   = true
-    @AppStorage("requireBiometrics") private var requireBiometrics: Bool   = true
+    @AppStorage("requireBiometrics") private var requireBiometrics: Bool   = false
 
     @State private var driverNameInput:       String = ""
     @State private var companyInput:          String = ""

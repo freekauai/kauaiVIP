@@ -20,12 +20,14 @@ struct KauaiVIP2026App: App {
     @StateObject private var bridgeService  = BridgeService()
     @StateObject private var authManager    = BiometricAuthManager()
 
-    /// Persisted theme preference — "system" (default) | "light" | "dark".
+    /// Persisted theme preference — "blueLight" (default, the released look) |
+    /// "blueDark" | "light" | "dark" | "system".
     /// Written by SettingsView; applied below via .preferredColorScheme().
-    @AppStorage("appTheme") private var appTheme: String = "system"
+    /// Default must match SettingsView's, or the picker shows the wrong selection.
+    @AppStorage("appTheme") private var appTheme: String = "blueLight"
 
     /// Whether biometric lock is enabled (mirrors SettingsView toggle).
-    @AppStorage("requireBiometrics") private var requireBiometrics: Bool = true
+    @AppStorage("requireBiometrics") private var requireBiometrics: Bool = false
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -39,7 +41,7 @@ struct KauaiVIP2026App: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()   // SUV splash, then the app
                 .environmentObject(store)
                 .environmentObject(weatherManager)
                 .environmentObject(bridgeService)
@@ -51,8 +53,16 @@ struct KauaiVIP2026App: App {
                 .id(appTheme)
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .background && requireBiometrics {
-                authManager.lockApp()
+            switch newPhase {
+            case .background where requireBiometrics:
+                authManager.lockApp()   // re-opening requires re-authentication
+            case .active:
+                // Refresh stale data on return from background;
+                // both services self-throttle (min 30 s between fetches).
+                weatherManager.refresh()
+                bridgeService.refresh()
+            default:
+                break
             }
         }
     }

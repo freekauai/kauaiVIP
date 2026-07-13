@@ -78,6 +78,7 @@ struct WeatherModalView: View {
             .navigationTitle("☀️ Kauai Weather")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Color(hex: "0d2137"), for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)   // navy bar → keep title legible in light theme
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Done") { dismiss() }
@@ -551,7 +552,7 @@ struct SurfSpotsMapView: View {
                     Divider().background(AppTheme.oceanLight).padding(.leading, 56)
                 }
             }
-            Color.clear.frame(height: 14)
+            Color.clear.frame(height: 34)   // clear the home indicator (card ignores bottom safe area)
         }
         .background(AppTheme.oceanMedium)
         .clipCorners(20, corners: [.topLeft, .topRight])
@@ -611,7 +612,8 @@ struct SurfSpotsMapView: View {
                     .background(AppTheme.coral)
                     .cornerRadius(AppTheme.buttonRadius)
             }
-            .padding([.horizontal, .bottom], 16)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 34)   // clear the home indicator (card ignores bottom safe area)
         }
         .background(AppTheme.oceanMedium)
         .clipCorners(20, corners: [.topLeft, .topRight])
@@ -649,7 +651,9 @@ struct SurfSpotsMapView: View {
         readings   = fresh
         isLoading  = false
         loadFailed = fresh.isEmpty
+        #if DEBUG
         print("🏄 surf map: \(fresh.count)/\(spots.count) spots loaded")
+        #endif
     }
 
     private static func fetch(_ c: CLLocationCoordinate2D) async -> SurfReading? {
@@ -664,7 +668,9 @@ struct SurfSpotsMapView: View {
         do {
             let (data, resp) = try await URLSession.shared.data(from: url)
             guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+                #if DEBUG
                 print("🏄 surf fetch \(c.latitude),\(c.longitude): HTTP \((resp as? HTTPURLResponse)?.statusCode ?? -1)")
+                #endif
                 return nil
             }
             let decoded = try JSONDecoder().decode(SpotMarineResponse.self, from: data)
@@ -679,7 +685,9 @@ struct SurfSpotsMapView: View {
                 waveFeet:       cur.wave_height.map { $0 * 3.28084 }
             )
         } catch {
+            #if DEBUG
             print("🏄 surf fetch \(c.latitude),\(c.longitude) failed: \(error)")
+            #endif
             return nil
         }
     }

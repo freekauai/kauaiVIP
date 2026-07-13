@@ -135,7 +135,10 @@ class BridgeService: ObservableObject {
     init() {
         Task { await fetchBridgeStatus() }
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 180, repeats: true) { [weak self] _ in
-            Task { await self?.fetchBridgeStatus() }
+            Task { @MainActor in
+                guard let self, !self.isLoading else { return }   // don't overlap an in-flight retry chain
+                await self.fetchBridgeStatus()
+            }
         }
     }
 

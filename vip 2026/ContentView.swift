@@ -22,7 +22,7 @@ struct ContentView: View {
 
     // Biometric auth
     @EnvironmentObject private var authManager: BiometricAuthManager
-    @AppStorage("requireBiometrics") private var requireBiometrics: Bool = true
+    @AppStorage("requireBiometrics") private var requireBiometrics: Bool = false
 
     var body: some View {
         ZStack {
@@ -57,7 +57,7 @@ struct ContentView: View {
                 }
             }
 
-            // ── Lock screen overlay ───────────────────────────────
+            // ── Lock screen overlay (honors the Settings toggle) ──
             if requireBiometrics && !authManager.isUnlocked {
                 LockScreenView()
                     .environmentObject(authManager)
@@ -81,7 +81,6 @@ private struct LockScreenView: View {
 
     var body: some View {
         ZStack {
-            // Background
             AppTheme.oceanDeep
                 .ignoresSafeArea()
 
@@ -93,7 +92,7 @@ private struct LockScreenView: View {
                     Text("🏝️")
                         .font(.system(size: 64))
 
-                    Text("KAUAI VIP")
+                    Text("RUNSHEET")
                         .font(.system(size: 32, weight: .black, design: .rounded))
                         .foregroundColor(AppTheme.textPrimary)
                         .tracking(4)
@@ -158,6 +157,46 @@ private struct LockScreenView: View {
         .onAppear {
             // Auto-trigger Face ID prompt without requiring a tap
             Task { await authManager.authenticate() }
+        }
+    }
+}
+
+// MARK: - Splash Screen
+/// Branded launch splash shown each time the app opens, then fades into the app.
+struct SplashView: View {
+    var body: some View {
+        ZStack {
+            Color.white.ignoresSafeArea()   // the SUV artwork sits on white
+            VStack(spacing: 18) {
+                Image("RunSheetVehicle")
+                    .resizable()
+                    .scaledToFit()
+                    .padding(.horizontal, 24)
+                    .accessibilityLabel("RunSheet")
+                Text("Copyright 2026 Joey Wray")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.black.opacity(0.5))
+            }
+        }
+    }
+}
+
+// MARK: - Root (splash → app)
+struct RootView: View {
+    @State private var showSplash = true
+
+    var body: some View {
+        ZStack {
+            ContentView()
+            if showSplash {
+                SplashView()
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
+        }
+        .task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)   // ~1.8s
+            withAnimation(.easeInOut(duration: 0.5)) { showSplash = false }
         }
     }
 }

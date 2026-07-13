@@ -127,13 +127,7 @@ class WeatherManager: ObservableObject {
     @Published var isLoading:       Bool   = true
     @Published var fetchError:      String? = nil
     @Published var lastUpdated:     Date?  = nil
-    /// Ticks every second — shared clock for any view that needs sub-minute precision
-    /// (e.g. TrafficBanner sunrise countdown). Centralises the 1-second timer so each
-    /// screen doesn't spin up its own.
-    @Published var clockNow:        Date   = Date()
-
     private var refreshTimer: Timer?
-    private var clockTimer:   AnyCancellable?
 
     private let location = CLLocation(latitude: 21.9811, longitude: -159.3711)
     private let minRefreshInterval: TimeInterval = 30
@@ -143,32 +137,16 @@ class WeatherManager: ObservableObject {
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { await self?.fetchWeather() }
         }
-        clockTimer = Timer.publish(every: 1, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] tick in self?.clockNow = tick }
     }
 
     deinit {
         refreshTimer?.invalidate()
-        clockTimer?.cancel()
     }
 
     // MARK: - Fetch
     func fetchWeather() async {
         isLoading      = true
         fetchError     = nil
-        // Reset optional fields so stale values never linger after a failed fetch
-        visibilityMi   = "-- mi"
-        dewPointF      = "--°F"
-        uvIndex        = "--"
-        waveHeightFt   = "--ft"
-        wavePeriodSec  = "--s"
-        waveDirection  = "--"
-        swellHeightFt  = "--ft"
-        swellPeriodSec = "--s"
-        sunriseTime         = nil
-        sunsetTime          = nil
-        tomorrowSunriseTime = nil
         updateMoonPhase()
 
         do {
@@ -181,8 +159,24 @@ class WeatherManager: ObservableObject {
             lastUpdated = Date()
             isLoading   = false
         } catch {
+            #if DEBUG
             print("☁️ weather fetch failed: \(error)")
+            #endif
             fetchError = "Weather unavailable: \(error.localizedDescription)"
+            // Reset optional fields only on FAILURE so stale values never linger —
+            // during a routine 5-min refresh the UI keeps showing last-good data
+            // instead of flashing "--" for the duration of the network calls.
+            visibilityMi   = "-- mi"
+            dewPointF      = "--°F"
+            uvIndex        = "--"
+            waveHeightFt   = "--ft"
+            wavePeriodSec  = "--s"
+            waveDirection  = "--"
+            swellHeightFt  = "--ft"
+            swellPeriodSec = "--s"
+            sunriseTime         = nil
+            sunsetTime          = nil
+            tomorrowSunriseTime = nil
             isLoading  = false
         }
     }
@@ -291,7 +285,7 @@ class WeatherManager: ObservableObject {
         dailyForecast = (0..<count).compactMap { i in
             guard let date = dayFmt.date(from: d.time[i]) else { return nil }
             let precip = (d.precipitation_probability_max?.indices.contains(i) == true)
-                ? d.precipitation_probability_max![i] : 0
+                ? d.precipitation_probability_max?[i] ?? 0 : 0
             return DailyForecastItem(
                 date:         date,
                 highF:        "\(Int(d.temperature_2m_max[i].rounded()))°F",
@@ -387,8 +381,18 @@ class WeatherManager: ObservableObject {
 
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
-            guard let http = response as? HTTPURLResponse else { print("🌊 marine: no HTTP response"); return }
-            guard http.statusCode == 200 else { print("🌊 marine: HTTP \(http.statusCode)"); return }
+            guard let http = response as? HTTPURLResponse else {
+                #if DEBUG
+                print("🌊 marine: no HTTP response")
+                #endif
+                return
+            }
+            guard http.statusCode == 200 else {
+                #if DEBUG
+                print("🌊 marine: HTTP \(http.statusCode)")
+                #endif
+                return
+            }
             let marine = try JSONDecoder().decode(MarineResponse.self, from: data)
 
             let c = marine.current
@@ -397,9 +401,13 @@ class WeatherManager: ObservableObject {
             if let dir    = c.wave_direction    { waveDirection  = compassAbbreviationDeg(degrees: Int(dir.rounded())) }
             if let swellM = c.swell_wave_height { swellHeightFt  = "\(String(format: "%.1f", swellM * 3.28084))ft" }
             if let swellP = c.swell_wave_period { swellPeriodSec = "\(Int(swellP.rounded()))s" }
+            #if DEBUG
             print("🌊 marine OK — wave \(waveHeightFt), swell \(swellHeightFt)")
+            #endif
         } catch {
+            #if DEBUG
             print("🌊 marine fetch failed: \(error)")
+            #endif
         }
     }
 
@@ -429,9 +437,13 @@ class WeatherManager: ObservableObject {
             townTemps = zip(towns, decoded).map { town, r in
                 TownTemp(name: town.0, tempF: "\(Int(r.current.temperature_2m.rounded()))°")
             }
+            #if DEBUG
             print("🌡️ town temps OK — \(townTemps.count) towns")
+            #endif
         } catch {
+            #if DEBUG
             print("🌡️ town temps failed: \(error)")
+            #endif
         }
     }
 

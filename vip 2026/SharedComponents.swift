@@ -11,25 +11,18 @@ struct TrafficBanner: View {
     @EnvironmentObject var weatherManager: WeatherManager
     @State private var showFAQ = false
 
-    private var now: Date { weatherManager.clockNow }
-
     var body: some View {
         let textColor: Color = bridgeService.level == .caution ? .black : .white
 
         VStack(spacing: 0) {
-            // ── Sunrise / Sunset countdown row ────────────────────
-            HStack(spacing: 6) {
-                Text(sunEventIcon + " " + sunEventName)
-                    .fontWeight(.bold)
-                Spacer()
-                Text(sunCountdown)
-                    .fontWeight(.bold)
-            }
-            .font(.system(size: 15))
-            .foregroundColor(textColor)
-            .padding(.horizontal, AppTheme.screenPad)
-            .padding(.top, 7)
-            .padding(.bottom, 5)
+            // ── Sunrise / Sunset countdown row (self-ticking leaf) ─
+            SunCountdownRow(sunrise:         weatherManager.sunriseTime,
+                            sunset:          weatherManager.sunsetTime,
+                            tomorrowSunrise: weatherManager.tomorrowSunriseTime,
+                            textColor:       textColor)
+                .padding(.horizontal, AppTheme.screenPad)
+                .padding(.top, 7)
+                .padding(.bottom, 5)
 
             Rectangle()
                 .fill(textColor.opacity(0.18))
@@ -41,14 +34,20 @@ struct TrafficBanner: View {
                 Text(bridgeService.level.bannerIcon)
                 Text("Traffic: \(bridgeService.trafficLevel)")
                     .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Circle().frame(width: 4, height: 4).opacity(0.5)
                 Text("Hanalei Bridge: \(bridgeService.bridgeStatus)")
                     .fontWeight(.semibold)
-                Spacer()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .layoutPriority(1)   // keep status readable; drop water level first
+                Spacer(minLength: 4)
                 if bridgeService.rawWaterFt != nil {
                     Text(bridgeService.waterLevelFt)
                         .font(.system(size: 11))
                         .opacity(0.75)
+                        .lineLimit(1)
                 }
                 Button { showFAQ = true } label: {
                     Text("?")
@@ -57,7 +56,10 @@ struct TrafficBanner: View {
                         .background(textColor.opacity(0.18))
                         .clipShape(Circle())
                         .foregroundColor(textColor)
+                        .frame(width: 32, height: 32)     // enlarge tap target
+                        .contentShape(Rectangle())
                 }
+                .accessibilityLabel("Bridge status help")
             }
             .font(.system(size: 13))
             .foregroundColor(textColor)
@@ -68,36 +70,58 @@ struct TrafficBanner: View {
         .animation(.easeInOut(duration: 0.3), value: bridgeService.level.rawValue)
         .sheet(isPresented: $showFAQ) { FAQView() }
     }
+}
+
+// MARK: - Sunrise / Sunset countdown (leaf view)
+/// Ticks once per second via TimelineView so ONLY this row re-renders —
+/// keeps the 1-second clock out of every screen's body (battery).
+private struct SunCountdownRow: View {
+    let sunrise:         Date?
+    let sunset:          Date?
+    let tomorrowSunrise: Date?
+    let textColor:       Color
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let now = context.date
+            HStack(spacing: 6) {
+                Text(sunEventIcon(now) + " " + sunEventName(now))
+                    .fontWeight(.bold)
+                Spacer()
+                Text(sunCountdown(now))
+                    .fontWeight(.bold)
+            }
+            .font(.system(size: 15))
+            .foregroundColor(textColor)
+        }
+    }
 
     // MARK: - Sun event helpers (all times HST / Pacific/Honolulu)
 
-    private var nextSunTarget: Date? {
-        guard let rise = weatherManager.sunriseTime,
-              let set  = weatherManager.sunsetTime else { return nil }
+    private func nextSunTarget(_ now: Date) -> Date? {
+        guard let rise = sunrise, let set = sunset else { return nil }
         if now < rise { return rise }
         if now < set  { return set }
         // After sunset — use real tomorrow sunrise if available, else +24h
-        return weatherManager.tomorrowSunriseTime ?? rise.addingTimeInterval(86_400)
+        return tomorrowSunrise ?? rise.addingTimeInterval(86_400)
     }
 
-    private var sunEventIcon: String {
-        guard let rise = weatherManager.sunriseTime,
-              let set  = weatherManager.sunsetTime else { return "🌅" }
+    private func sunEventIcon(_ now: Date) -> String {
+        guard let rise = sunrise, let set = sunset else { return "🌅" }
         if now < rise { return "🌅" }
         if now < set  { return "🌇" }
         return "🌅"
     }
 
-    private var sunEventName: String {
-        guard let rise = weatherManager.sunriseTime,
-              let set  = weatherManager.sunsetTime else { return "Sunrise · HST" }
+    private func sunEventName(_ now: Date) -> String {
+        guard let rise = sunrise, let set = sunset else { return "Sunrise · HST" }
         if now < rise { return "Sunrise · HST" }
         if now < set  { return "Sunset · HST" }
         return "Tomorrow's Sunrise · HST"
     }
 
-    private var sunCountdown: String {
-        guard let target = nextSunTarget else { return "--" }
+    private func sunCountdown(_ now: Date) -> String {
+        guard let target = nextSunTarget(now) else { return "--" }
         let secs = max(0, Int(target.timeIntervalSince(now)))
         if secs == 0 { return "Now" }
         let h = secs / 3600
@@ -106,6 +130,34 @@ struct TrafficBanner: View {
         if h > 0 { return "in \(h)h \(m)m" }
         if m > 0 { return "in \(m)m \(s)s" }
         return "in \(s)s"
+    }
+}
+
+// MARK: - Driver Name Band
+/// The blue band with the driver's name (plus optional next-trip countdown)
+/// shown directly under the top strip — identical on every page.
+struct DriverBand: View {
+    let name: String
+    var countdown: String? = nil
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(name)
+                .font(.system(size: 28, weight: .black, design: .rounded))
+                .foregroundColor(AppTheme.oceanDeep)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .padding(.horizontal, 12)
+
+            if let countdown {
+                Text("Next: \(countdown)")
+                    .font(.system(size: 26, weight: .bold))
+                    .foregroundColor(AppTheme.oceanDeep.opacity(0.7))
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(AppTheme.success)
     }
 }
 
@@ -173,15 +225,15 @@ struct PeriodTopButtons: View {
 
             // ── Map ──────────────────────────────────────────────
             TopButton(icon: "map.fill",              label: "MAP",     color: AppTheme.info,    action: onMap)
-                .frame(width: 66)
+                .frame(minWidth: 56, maxWidth: 72)
 
             // ── Traffic ──────────────────────────────────────────
             TopButton(icon: "light.beacon.max.fill", label: "TRAFFIC", color: AppTheme.coral,   action: onTraffic)
-                .frame(width: 66)
+                .frame(minWidth: 56, maxWidth: 72)
 
             // ── Stats ─────────────────────────────────────────────
             TopButton(icon: "chart.bar.fill",        label: "STATS",   color: AppTheme.success, action: onStats)
-                .frame(width: 66)
+                .frame(minWidth: 56, maxWidth: 72)
         }
         .padding(.horizontal, AppTheme.screenPad)
         .padding(.vertical, 10)
@@ -654,6 +706,10 @@ struct AppFooter: View {
                 .font(.system(size: 12))
                 .foregroundColor(AppTheme.textTertiary)
 
+            Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.3")")
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+
             HStack(spacing: 6) {
                 if let mail = AppConstants.mailtoURL {
                     Link(AppConstants.developerName, destination: mail)
@@ -696,7 +752,7 @@ struct FAQView: View {
                         VStack(spacing: 8) {
                             Text("🏝️")
                                 .font(.system(size: 56))
-                            Text("KAUAI VIP 2026")
+                            Text("RunSheet")
                                 .font(.system(size: 20, weight: .black, design: .rounded))
                                 .foregroundColor(AppTheme.textPrimary)
                                 .tracking(2)

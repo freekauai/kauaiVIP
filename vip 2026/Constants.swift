@@ -19,7 +19,7 @@ enum AppConstants {
 
     // MARK: - Deep-link helpers
     static var mailtoURL: URL? {
-        URL(string: "mailto:\(supportEmail)?subject=Kauai%20VIP%202026%20Feedback")
+        URL(string: "mailto:\(supportEmail)?subject=RunSheet%20Feedback")
     }
     static var websiteURL: URL? {
         URL(string: developerWebsite)

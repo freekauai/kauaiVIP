@@ -36,7 +36,7 @@ enum AppTheme {
 
     /// Resolves a palette color for the currently-selected theme.
     private static func resolve(_ key: KeyPath<ThemePalette, Color>) -> Color {
-        switch UserDefaults.standard.string(forKey: "appTheme") ?? "system" {
+        switch UserDefaults.standard.string(forKey: "appTheme") ?? "blueLight" {
         case "light":     return ThemePalette.classicLight[keyPath: key]
         case "dark":      return ThemePalette.classicDark[keyPath: key]
         case "blueLight": return ThemePalette.blueLight[keyPath: key]

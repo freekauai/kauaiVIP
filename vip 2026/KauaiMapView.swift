@@ -259,6 +259,7 @@ struct KauaiMapView: View {
                 .disabled(coordsCopied)
             }
             .padding(16)
+            .padding(.bottom, 18)   // clear the home indicator (card ignores bottom safe area)
         }
         .background(AppTheme.oceanMedium)
         .clipCorners(20, corners: [.topLeft, .topRight])

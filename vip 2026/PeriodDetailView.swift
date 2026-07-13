@@ -20,6 +20,7 @@ struct PeriodDetailView: View {
     @State private var tripToDelete: Trip? = nil
     @State private var showDeleteAlert = false
     @State private var showDeletePeriodAlert = false
+    @State private var showSettings = false
     @State private var now = Date()
 
     // Undo toast for isActive toggle (issue #10)
@@ -74,6 +75,7 @@ struct PeriodDetailView: View {
                                 colors: [AppTheme.oceanDeep.opacity(0), AppTheme.oceanDeep],
                                 startPoint: .top, endPoint: .bottom
                             )
+                            .allowsHitTesting(false)   // fade is decor — don't eat taps
                         )
                 }
             } else {
@@ -84,6 +86,12 @@ struct PeriodDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(AppTheme.oceanDeep, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { showSettings = true }) {
+                    Image(systemName: "gearshape")
+                        .foregroundColor(AppTheme.coral)
+                }
+            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button(action: exportPDF) {
@@ -137,11 +145,21 @@ struct PeriodDetailView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: undoableTrip?.id)
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environmentObject(store)
+        }
         .sheet(isPresented: $showAddTrip) {
             TripFormView(periodID: periodID, existingTrip: nil)
+                .environmentObject(store)            // sheets don't inherit env objects
+                .environmentObject(bridgeService)    // TripFormView embeds TrafficBanner
+                .environmentObject(weatherManager)
         }
         .sheet(item: $editingTrip) { trip in
             TripFormView(periodID: periodID, existingTrip: trip)
+                .environmentObject(store)
+                .environmentObject(bridgeService)
+                .environmentObject(weatherManager)
         }
         .alert("Delete Trip?", isPresented: $showDeleteAlert, presenting: tripToDelete) { trip in
             Button("Delete", role: .destructive) {
@@ -164,29 +182,11 @@ struct PeriodDetailView: View {
 
     // MARK: - Driver Header
     private var driverHeader: some View {
-        ZStack {
-            HStack(spacing: 0) {
-                Spacer()
-                VStack(spacing: 4) {
-                    Text(store.displayName)
-                        .font(.system(size: 28, weight: .black, design: .rounded))
-                        .foregroundColor(AppTheme.oceanDeep)
-
-                    // Next-trip countdown for this period
-                    if countdownEnabled, let nextTime = nextUpTripTime {
-                        if nextTime > now {
-                            Text("Next: \(countdownLabel(now: now, target: nextTime))")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(AppTheme.oceanDeep.opacity(0.7))
-                        }
-                    }
-                }
-                Spacer()
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(AppTheme.success)
+        let cd: String? = {
+            guard countdownEnabled, let t = nextUpTripTime, t > now else { return nil }
+            return countdownLabel(now: now, target: t)
+        }()
+        return DriverBand(name: store.displayName, countdown: cd)
     }
 
     // MARK: - Summary Card
@@ -220,11 +220,13 @@ struct PeriodDetailView: View {
         // Only consider user-enabled trips that aren't currently live
         let candidates = period.trips.filter { $0.isActive && !$0.isLive(at: now) }
 
-        // 1. Prefer explicit future start times
+        // 1. Prefer explicit future start times — earliestEnteredTime anchors the
+        // entered clock time onto the trip's date, so the badge agrees with the
+        // header countdown and trips dated tomorrow aren't skipped after today's
+        // clock time passes.
         let timed = candidates.compactMap { trip -> (UUID, Date)? in
-            if trip.hasLeftBase, let lb = trip.timeLeftBase, lb > now { return (trip.id, lb) }
-            if trip.hasPUTime,   let pu = trip.pickupTime,  pu > now  { return (trip.id, pu) }
-            return nil
+            guard let t = trip.earliestEnteredTime, t > now else { return nil }
+            return (trip.id, t)
         }
         if let soonest = timed.min(by: { $0.1 < $1.1 }) { return soonest.0 }
 
@@ -271,15 +273,18 @@ struct PeriodDetailView: View {
                 )
             } else {
                 let nextUp = nextUpTripID
-                let sorted = period.trips.sorted {
-                    let dayA = Calendar.current.startOfDay(for: $0.date)
-                    let dayB = Calendar.current.startOfDay(for: $1.date)
-                    if dayA != dayB { return dayA > dayB }
-                    // Within the same day, latest start time on top
-                    let timeA = $0.timeLeftBase ?? $0.pickupTime ?? $0.date
-                    let timeB = $1.timeLeftBase ?? $1.pickupTime ?? $1.date
-                    return timeA > timeB
-                }
+                // This body re-evaluates every second (countdown tick), so keep the
+                // sort cheap: compute each trip's key once (O(n) calendar calls)
+                // instead of inside every comparison.
+                let sorted = period.trips
+                    .map { (trip: $0,
+                            day:  Calendar.current.startOfDay(for: $0.date),
+                            time: $0.earliestEnteredTime ?? $0.date) }   // anchored to trip date
+                    .sorted { a, b in
+                        if a.day != b.day { return a.day > b.day }
+                        return a.time > b.time   // within the same day, latest start on top
+                    }
+                    .map(\.trip)
                 ForEach(sorted) { trip in
                     TripCard(
                         trip:             trip,
@@ -315,14 +320,14 @@ struct PeriodDetailView: View {
         guard let period = period else { return }
         let safe = period.label.replacingOccurrences(of: " ", with: "_")
         shareFile(data: period.pdfData(driverName: store.displayName),
-                  filename: "KauaiVIP_\(safe).pdf")
+                  filename: "RunSheet_\(safe).pdf")
     }
 
     private func exportCSV() {
         guard let period = period else { return }
         let safe = period.label.replacingOccurrences(of: " ", with: "_")
         let data = Data(period.csvString.utf8)
-        shareFile(data: data, filename: "KauaiVIP_\(safe).csv")
+        shareFile(data: data, filename: "RunSheet_\(safe).csv")
     }
 }
 
@@ -455,8 +460,10 @@ struct TripCard: View {
 
                 Spacer()
 
-                // Countdown clock + action buttons (top-right)
-                VStack(alignment: .trailing, spacing: 10) {
+                // Countdown clock + action buttons (top-right).
+                // spacing 0: the 36pt button frames already provide the touch
+                // separation — extra spacing spread the column and grew the card.
+                VStack(alignment: .trailing, spacing: 0) {
                     // Live countdown to this trip's first time
                     if let cd = countdownText {
                         HStack(spacing: 3) {
@@ -473,10 +480,14 @@ struct TripCard: View {
                     }
 
                     // Active/Inactive toggle
+                    // 36pt frames + contentShape give near-44pt tap targets so
+                    // toggle/edit/delete can't be fat-fingered from a moving seat.
                     Button(action: onToggleActive) {
                         Image(systemName: trip.isActive ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: 16))
                             .foregroundColor(trip.isActive ? AppTheme.success : AppTheme.textTertiary)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel(trip.isActive ? "Deactivate trip" : "Activate trip")
 
@@ -484,6 +495,8 @@ struct TripCard: View {
                         Image(systemName: "pencil")
                             .font(.system(size: 14))
                             .foregroundColor(AppTheme.coral)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Edit trip for \(trip.clientName)")
 
@@ -491,6 +504,8 @@ struct TripCard: View {
                         Image(systemName: "trash")
                             .font(.system(size: 14))
                             .foregroundColor(AppTheme.error)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Delete trip for \(trip.clientName)")
                 }

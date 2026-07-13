@@ -311,6 +311,8 @@ struct StatsView: View {
                             Text(service.rawValue)
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(AppTheme.textSecondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
                                 .frame(width: 90, alignment: .leading)
                             GeometryReader { geo in
                                 let fraction = trips.isEmpty ? 0.0 : CGFloat(count) / CGFloat(trips.count)
@@ -351,6 +353,8 @@ struct StatsView: View {
                             Text(vehicle.rawValue)
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(AppTheme.textSecondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
                                 .frame(width: 90, alignment: .leading)
                             GeometryReader { geo in
                                 let fraction = trips.isEmpty ? 0.0 : CGFloat(count) / CGFloat(trips.count)

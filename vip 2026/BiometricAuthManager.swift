@@ -32,9 +32,21 @@ final class BiometricAuthManager: ObservableObject {
         var error: NSError?
 
         // Prefer biometrics, fall back to device passcode
-        let policy: LAPolicy = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
-            ? .deviceOwnerAuthenticationWithBiometrics
-            : .deviceOwnerAuthentication
+        let policy: LAPolicy
+        if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+            policy = .deviceOwnerAuthenticationWithBiometrics
+        } else if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) {
+            policy = .deviceOwnerAuthentication
+        } else {
+            // No Face ID enrolled AND no device passcode (common on simulators):
+            // there is nothing to authenticate against — unlock rather than
+            // brick the app on the lock screen forever.
+            withAnimation(.easeInOut(duration: 0.35)) {
+                isUnlocked = true
+                authError  = nil
+            }
+            return
+        }
 
         let reason = "Unlock Kauai VIP to access your trip data."
 

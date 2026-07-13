@@ -72,7 +72,7 @@ struct NewPeriodView: View {
                                 Image(systemName: "info.circle.fill")
                                     .foregroundColor(AppTheme.info)
                                     .font(.system(size: 18))
-                                Text("Pay periods must be **14 to 16 days** to align with Kauai VIP's bi-monthly schedule. Start dates should fall on the 1st or 16th of each month.")
+                                Text("Pay periods must be **14 to 16 days** to align with RunSheet's bi-monthly schedule. Start dates should fall on the 1st or 16th of each month.")
                                     .font(.system(size: 13))
                                     .foregroundColor(AppTheme.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)

@@ -57,7 +57,11 @@ struct MainView: View {
                     TrafficBanner()
 
                     // ── Top Action Buttons ────────────────────────────
-                    TopActionButtons(
+                    // Same live strip as the trips page: weather temp +
+                    // condition + moon phase + wave height, then Map /
+                    // Traffic / Stats — consistent above the driver name
+                    // on every page (sunset countdown lives in the banner).
+                    PeriodTopButtons(
                         onWeather: { activeModal = .weather },
                         onMap:     { activeModal = .map },
                         onTraffic: { activeModal = .traffic },
@@ -87,6 +91,7 @@ struct MainView: View {
                                 colors: [AppTheme.oceanDeep.opacity(0), AppTheme.oceanDeep],
                                 startPoint: .top, endPoint: .bottom
                             )
+                            .allowsHitTesting(false)   // fade is decor — don't eat taps
                         )
                 }
             }
@@ -102,13 +107,16 @@ struct MainView: View {
                 didAutoNavigate = true
                 selectedPeriod = newest
             }
+            // NOTE: autoconnect() manages the timer's connection. Do NOT manually
+            // connect/cancel the upstream — that kills the timer permanently, so
+            // the "Next:" countdown would freeze after the first navigation push.
             .onReceive(mainTimer) { now = $0 }
-            .onDisappear { mainTimer.upstream.connect().cancel() }
             .navigationDestination(item: $selectedPeriod) { period in
                 PeriodDetailView(periodID: period.id, activeModal: $activeModal)
             }
             .sheet(isPresented: $showNewPeriod) {
                 NewPeriodView()
+                    .environmentObject(store)   // sheets don't inherit env objects
             }
             .sheet(isPresented: $showCSVImport) {
                 CSVImportView().environmentObject(store)
@@ -130,46 +138,12 @@ struct MainView: View {
 
     // MARK: - Header
     private var headerSection: some View {
-        VStack(spacing: 6) {
-            Text("🏝️ KAUAI VIP")
-                .font(.system(size: 30, weight: .black, design: .rounded))
-                .foregroundColor(AppTheme.textPrimary)
-                .tracking(2)
-            Text("2026")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(AppTheme.coral)
-                .tracking(5)
-            if !store.driverName.isEmpty {
-                if countdownEnabled, let cd = globalCountdownLabel() {
-                    HStack(spacing: 8) {
-                        Text(store.displayName)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(AppTheme.textPrimary)
-                        Text("|")
-                            .foregroundColor(AppTheme.textTertiary)
-                        HStack(spacing: 4) {
-                            Image(systemName: "timer")
-                                .font(.system(size: 13))
-                                .foregroundColor(AppTheme.coral)
-                            Text("Next: \(cd)")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(AppTheme.coral)
-                        }
-                    }
-                    .padding(.top, 4)
-                } else {
-                    Text(store.displayName)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(AppTheme.textPrimary)
-                        .padding(.top, 4)
-                }
-            }
-            Text("Driver Timesheet System")
-                .font(.system(size: 13))
-                .foregroundColor(AppTheme.textTertiary)
-        }
-        .padding(.top, 20)
-        .padding(.bottom, 8)
+        // Same blue band as the trips page — the top of every page is
+        // identical down through the driver's name.
+        DriverBand(
+            name: store.displayName,
+            countdown: countdownEnabled ? globalCountdownLabel() : nil
+        )
     }
 
     // MARK: - Live Conditions Card
