@@ -31,6 +31,11 @@ struct KauaiVIP2026App: App {
 
     @Environment(\.scenePhase) private var scenePhase
 
+    /// True after the app has actually been backgrounded — used so the
+    /// return-to-foreground re-prompt doesn't also fire on cold launch
+    /// (where the lock screen's own onAppear handles it, post-splash).
+    @State private var cameFromBackground = false
+
     private var preferredColorScheme: ColorScheme? {
         switch appTheme {
         case "dark", "blueDark":   return .dark
@@ -56,14 +61,26 @@ struct KauaiVIP2026App: App {
             switch newPhase {
             case .background where requireBiometrics:
                 authManager.lockApp()   // re-opening requires re-authentication
+                cameFromBackground = true
             case .active:
                 // Refresh stale data on return from background;
                 // both services self-throttle (min 30 s between fetches).
                 weatherManager.refresh()
                 bridgeService.refresh()
+                // Re-prompt Face ID automatically on return — onAppear only
+                // fires once, so without this the user must tap Unlock.
+                if cameFromBackground && requireBiometrics && !authManager.isUnlocked {
+                    Task { await authManager.authenticate() }
+                }
+                cameFromBackground = false
             default:
                 break
             }
+        }
+        .onChange(of: requireBiometrics) { _, enabled in
+            // Turning the lock ON shouldn't lock the user out mid-Settings —
+            // they're clearly present. Arm it for the next launch/background.
+            if enabled { authManager.isUnlocked = true }
         }
     }
 }

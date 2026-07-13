@@ -27,7 +27,15 @@ final class BiometricAuthManager: ObservableObject {
     /// Attempts Face ID / Touch ID with automatic fallback to device passcode.
     /// On success sets `isUnlocked = true` and clears `authError`.
     /// On failure surfaces a message in `authError`.
+    /// Guards against overlapping prompts when multiple triggers race
+    /// (lock-screen onAppear + scene-active re-prompt).
+    private var isAuthenticating = false
+
     func authenticate() async {
+        guard !isUnlocked, !isAuthenticating else { return }
+        isAuthenticating = true
+        defer { isAuthenticating = false }
+
         let context = LAContext()
         var error: NSError?
 
@@ -48,7 +56,7 @@ final class BiometricAuthManager: ObservableObject {
             return
         }
 
-        let reason = "Unlock Kauai VIP to access your trip data."
+        let reason = "Unlock RunSheet to access your trip data."
 
         do {
             let success = try await context.evaluatePolicy(policy, localizedReason: reason)

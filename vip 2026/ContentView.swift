@@ -155,8 +155,13 @@ private struct LockScreenView: View {
             }
         }
         .onAppear {
-            // Auto-trigger Face ID prompt without requiring a tap
-            Task { await authManager.authenticate() }
+            // Auto-trigger Face ID without requiring a tap — after the splash
+            // has faded, so the system sheet appears over the branded lock
+            // screen instead of floating on the white SUV artwork.
+            Task {
+                try? await Task.sleep(nanoseconds: 2_400_000_000)
+                await authManager.authenticate()
+            }
         }
     }
 }
