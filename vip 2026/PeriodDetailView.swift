@@ -182,14 +182,29 @@ struct PeriodDetailView: View {
 
     // MARK: - Driver Header
     private var driverHeader: some View {
+        // One chip per countdown-enabled trip, soonest first, each counting
+        // to that trip's next upcoming time point.
+        let enabled = (period?.trips ?? [])
+            .filter { $0.isActive && $0.showCountdown }
+            .compactMap { trip -> (String, Date)? in
+                guard let t = trip.nextUpcomingTime(after: now) else { return nil }
+                let label = trip.clientName.isEmpty ? trip.service.rawValue : trip.clientName
+                return (label, t)
+            }
+            .sorted { $0.1 < $1.1 }
+        let chips = enabled.map { (label: $0.0, value: countdownLabel(now: now, target: $0.1)) }
+
+        // Fall back to the single "Next:" line when no trips opted in
         let cd: String? = {
-            guard countdownEnabled, let t = nextUpTripTime, t > now else { return nil }
+            guard chips.isEmpty, countdownEnabled,
+                  let t = nextUpTripTime, t > now else { return nil }
             return countdownLabel(now: now, target: t)
         }()
         return DriverBand(
             name: store.driverName,
             company: store.companyName.isEmpty ? nil : store.companyName,
-            countdown: cd
+            countdown: cd,
+            countdowns: chips
         )
     }
 
@@ -378,7 +393,7 @@ struct TripCard: View {
     /// time. Past trips show nothing.
     private var countdownText: String? {
         guard trip.showCountdown,
-              let target = trip.earliestEnteredTime else { return nil }
+              let target = trip.nextUpcomingTime(after: now) else { return nil }
         let interval = target.timeIntervalSince(now)
         guard interval > 0 else { return nil }       // past trips: no "Departed" noise
         let h = Int(interval) / 3600

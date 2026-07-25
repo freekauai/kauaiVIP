@@ -158,6 +158,13 @@ struct Trip: Identifiable, Codable {
         orderedTimes.first
     }
 
+    /// The trip's next time point still in the future (leave base → pickup →
+    /// drop-off → back to base, anchored to the trip's date). As each time
+    /// passes, the countdown rolls forward to the next one.
+    func nextUpcomingTime(after now: Date) -> Date? {
+        orderedTimes.first { $0 > now }
+    }
+
     /// True if `now` falls within this trip's active window (start → end).
     func isLive(at now: Date) -> Bool {
         let times = orderedTimes

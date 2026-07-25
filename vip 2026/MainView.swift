@@ -139,12 +139,35 @@ struct MainView: View {
     // MARK: - Header
     private var headerSection: some View {
         // Same blue band as the trips page — the top of every page is
-        // identical down through the driver's name.
-        DriverBand(
+        // identical down through the driver's name. One chip per
+        // countdown-enabled trip (soonest first) across all periods.
+        let enabled = store.periods.flatMap(\.trips)
+            .filter { $0.isActive && $0.showCountdown }
+            .compactMap { trip -> (String, Date)? in
+                guard let t = trip.nextUpcomingTime(after: now) else { return nil }
+                let label = trip.clientName.isEmpty ? trip.service.rawValue : trip.clientName
+                return (label, t)
+            }
+            .sorted { $0.1 < $1.1 }
+        let chips = enabled.map { (label: $0.0, value: chipCountdownLabel(to: $0.1)) }
+
+        return DriverBand(
             name: store.driverName,
             company: store.companyName.isEmpty ? nil : store.companyName,
-            countdown: countdownEnabled ? globalCountdownLabel() : nil
+            countdown: chips.isEmpty && countdownEnabled ? globalCountdownLabel() : nil,
+            countdowns: chips
         )
+    }
+
+    private func chipCountdownLabel(to target: Date) -> String {
+        let interval = target.timeIntervalSince(now)
+        guard interval > 0 else { return "Now" }
+        let h = Int(interval) / 3600
+        let m = (Int(interval) % 3600) / 60
+        let s = Int(interval) % 60
+        if h > 0 { return "\(h)h \(m)m" }
+        if m > 0 { return "\(m)m \(s)s" }
+        return "\(s)s"
     }
 
     // MARK: - Live Conditions Card

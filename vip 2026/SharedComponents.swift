@@ -139,7 +139,8 @@ private struct SunCountdownRow: View {
 struct DriverBand: View {
     let name: String                 // driver name — always primary
     var company: String? = nil       // company name — subline under the driver
-    var countdown: String? = nil
+    var countdown: String? = nil     // single "Next:" line (used when no chips)
+    var countdowns: [(label: String, value: String)] = []   // per-trip chips, side by side
 
     var body: some View {
         VStack(spacing: 4) {
@@ -159,7 +160,33 @@ struct DriverBand: View {
                     .padding(.horizontal, 12)
             }
 
-            if let countdown {
+            if !countdowns.isEmpty {
+                // One chip per countdown-enabled trip, side by side.
+                // Scrolls horizontally if more fit than the screen allows.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(countdowns.enumerated()), id: \.offset) { _, chip in
+                            VStack(spacing: 1) {
+                                Text(chip.label)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(AppTheme.oceanDeep.opacity(0.75))
+                                    .lineLimit(1)
+                                Text(chip.value)
+                                    .font(.system(size: 20, weight: .black, design: .rounded))
+                                    .monospacedDigit()
+                                    .foregroundColor(AppTheme.oceanDeep)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(AppTheme.oceanDeep.opacity(0.12))
+                            .cornerRadius(10)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity)   // centers when chips don't fill the width
+                }
+                .padding(.top, 4)
+            } else if let countdown {
                 Text("Next: \(countdown)")
                     .font(.system(size: 26, weight: .bold))
                     .foregroundColor(AppTheme.oceanDeep.opacity(0.7))
