@@ -309,7 +309,7 @@ extension PayPeriod {
             cg.fill(CGRect(x: 0, y: 0, width: pageW, height: 118))
 
             // App name (small, above driver name)
-            _ = drawText("KAUAI VIP 2026", in: ctx, at: CGPoint(x: margin, y: 14),
+            _ = drawText("RUNSHEET", in: ctx, at: CGPoint(x: margin, y: 14),
                          font: .systemFont(ofSize: 10, weight: .semibold),
                          color: UIColor.white.withAlphaComponent(0.55), width: contentW)
 
@@ -437,7 +437,7 @@ extension PayPeriod {
             // ── Footer ─────────────────────────────────────────────────────
             let footerY: CGFloat = pageH - 20
             drawDivider(at: footerY - 6)
-            _ = drawText("KAUAI VIP 2026  ·  Driver Timesheet System", in: ctx,
+            _ = drawText("RunSheet  ·  Driver Timesheet System", in: ctx,
                          at: CGPoint(x: margin, y: footerY),
                          font: .systemFont(ofSize: 8), color: .lightGray, width: contentW / 2)
         }
@@ -604,7 +604,7 @@ func makeStatsPDF(title: String, sections: [(String, [Trip])], driverName: Strin
         cg.setFillColor(oceanDeep.cgColor)
         cg.fill(CGRect(x: 0, y: 0, width: pageW, height: 118))
 
-        _ = drawText("KAUAI VIP 2026", in: ctx, at: CGPoint(x: margin, y: 14),
+        _ = drawText("RUNSHEET", in: ctx, at: CGPoint(x: margin, y: 14),
                      font: .systemFont(ofSize: 10, weight: .semibold),
                      color: UIColor.white.withAlphaComponent(0.55), width: contentW)
 
@@ -756,7 +756,7 @@ func makeStatsPDF(title: String, sections: [(String, [Trip])], driverName: Strin
         // Footer on last page
         let footerY: CGFloat = pageH - 20
         drawDivider(cg: ctx.cgContext, at: footerY - 6)
-        _ = drawText("KAUAI VIP 2026  ·  Driver Timesheet System", in: ctx,
+        _ = drawText("RunSheet  ·  Driver Timesheet System", in: ctx,
                      at: CGPoint(x: margin, y: footerY),
                      font: .systemFont(ofSize: 8), color: .lightGray, width: contentW / 2)
     }

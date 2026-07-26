@@ -169,18 +169,52 @@ private struct LockScreenView: View {
 // MARK: - Splash Screen
 /// Branded launch splash shown each time the app opens, then fades into the app.
 struct SplashView: View {
+    @State private var driveIn = false
+
     var body: some View {
         ZStack {
             Color.white.ignoresSafeArea()   // the SUV artwork sits on white
-            VStack(spacing: 18) {
+
+            VStack(spacing: 0) {
+                Spacer()
+
+                // SUV drives in from the left and settles
                 Image("RunSheetVehicle")
                     .resizable()
                     .scaledToFit()
                     .padding(.horizontal, 24)
+                    .offset(x: driveIn ? 0 : -120)
+                    .opacity(driveIn ? 1 : 0)
                     .accessibilityLabel("RunSheet")
-                Text("Copyright 2026 Joey Wray")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.black.opacity(0.5))
+
+                // Wordmark + tagline (matches the in-app rounded-black style)
+                VStack(spacing: 6) {
+                    Text("RunSheet")
+                        .font(.system(size: 36, weight: .black, design: .rounded))
+                        .foregroundColor(Color(hex: "0F2547"))
+                    Text("Driver Timesheet System")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(Color(hex: "7488A3"))
+                        .tracking(1.5)
+                }
+                .padding(.top, 22)
+                .opacity(driveIn ? 1 : 0)
+
+                Spacer()
+            }
+
+            // Copyright pinned at the bottom edge
+            VStack {
+                Spacer()
+                Text("© 2026 Joey Wray")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color(hex: "7488A3"))
+                    .padding(.bottom, 8)
+            }
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.65, dampingFraction: 0.82).delay(0.1)) {
+                driveIn = true
             }
         }
     }

@@ -32,7 +32,7 @@ struct DriverNameSetupView: View {
                 VStack(spacing: 8) {
                     Text("🏝️")
                         .font(.system(size: 64))
-                    Text("KAUAI VIP 2026")
+                    Text("RUNSHEET")
                         .font(.system(size: 26, weight: .black, design: .rounded))
                         .foregroundColor(AppTheme.textPrimary)
                         .tracking(2)
