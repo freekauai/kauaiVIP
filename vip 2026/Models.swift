@@ -394,7 +394,18 @@ extension PayPeriod {
 
             for (idx, trip) in sorted.enumerated() {
                 let hasNotes = !trip.notes.isEmpty
-                let rowH: CGFloat = hasNotes ? 34 : 22
+                // Dynamic row height: long client names wrap and notes can
+                // span several lines — measure both so rows never overlap.
+                let clientH = measureText(trip.clientName,
+                                          font: .systemFont(ofSize: 10, weight: .medium),
+                                          width: cols[3].1 - 4)
+                let noteH: CGFloat = hasNotes
+                    ? measureText("↳  \(trip.notes)",
+                                  font: .italicSystemFont(ofSize: 8),
+                                  width: contentW - 8)
+                    : 0
+                let bodyH = max(14, clientH)
+                let rowH: CGFloat = 4 + bodyH + (hasNotes ? noteH + 4 : 0) + 4
 
                 if y + rowH > pageH - margin {
                     ctx.beginPage()
@@ -428,7 +439,7 @@ extension PayPeriod {
 
                 if hasNotes {
                     _ = drawText("↳  \(trip.notes)", in: ctx,
-                                 at: CGPoint(x: margin + 8, y: y + 19),
+                                 at: CGPoint(x: margin + 8, y: y + 6 + bodyH),
                                  font: .italicSystemFont(ofSize: 8), color: .gray, width: contentW - 8)
                 }
                 y += rowH
@@ -442,6 +453,20 @@ extension PayPeriod {
                          font: .systemFont(ofSize: 8), color: .lightGray, width: contentW / 2)
         }
     }
+}
+
+// MARK: - PDF Text Measurement
+/// Height the given text needs when wrapped to `width` — used to size PDF
+/// table rows dynamically so wrapped client names and multi-line notes
+/// never overlap the next row.
+private func measureText(_ text: String, font: UIFont, width: CGFloat) -> CGFloat {
+    let para = NSMutableParagraphStyle()
+    para.alignment = .left
+    let astr = NSAttributedString(string: text, attributes: [
+        .font: font, .paragraphStyle: para
+    ])
+    return ceil(astr.boundingRect(with: CGSize(width: width, height: 2000),
+                                  options: .usesLineFragmentOrigin, context: nil).height)
 }
 
 // MARK: - CSV Export Helper
@@ -712,7 +737,18 @@ func makeStatsPDF(title: String, sections: [(String, [Trip])], driverName: Strin
             let sorted = trips.sorted { $0.date < $1.date }
             for (idx, trip) in sorted.enumerated() {
                 let hasNotes = !trip.notes.isEmpty
-                let rowH: CGFloat = hasNotes ? 34 : 22
+                // Dynamic row height: long client names wrap and notes can
+                // span several lines — measure both so rows never overlap.
+                let clientH = measureText(trip.clientName,
+                                          font: .systemFont(ofSize: 10, weight: .medium),
+                                          width: cols[3].1 - 4)
+                let noteH: CGFloat = hasNotes
+                    ? measureText("↳  \(trip.notes)",
+                                  font: .italicSystemFont(ofSize: 8),
+                                  width: contentW - 8)
+                    : 0
+                let bodyH = max(14, clientH)
+                let rowH: CGFloat = 4 + bodyH + (hasNotes ? noteH + 4 : 0) + 4
 
                 if y + rowH > pageH - margin {
                     ctx.beginPage()
@@ -745,7 +781,7 @@ func makeStatsPDF(title: String, sections: [(String, [Trip])], driverName: Strin
                 }
                 if hasNotes {
                     _ = drawText("↳  \(trip.notes)", in: ctx,
-                                 at: CGPoint(x: margin + 8, y: y + 19),
+                                 at: CGPoint(x: margin + 8, y: y + 6 + bodyH),
                                  font: .italicSystemFont(ofSize: 8), color: .gray, width: contentW - 8)
                 }
                 y += rowH
