@@ -1,5 +1,5 @@
 // ╔══════════════════════════════════════════════════════════════╗
-// ║           KAUAI VIP 2026 — Traffic Modal (NOAA Bridge)      ║
+// ║           RUNSHEET — Traffic Modal (USGS River Gauge)       ║
 // ║           TrafficModalView.swift                             ║
 // ╚══════════════════════════════════════════════════════════════╝
 
@@ -94,7 +94,7 @@ struct TrafficModalView: View {
     private var waterLevelCard: some View {
         AppCard {
             VStack(alignment: .leading, spacing: 12) {
-                Text("RIVER WATER LEVEL (MLLW)").labelStyle()
+                Text("RIVER WATER LEVEL (USGS GAGE)").labelStyle()
 
                 if bridgeService.rawWaterFt != nil {
                     VStack(alignment: .leading, spacing: 6) {
@@ -209,7 +209,7 @@ struct TrafficModalView: View {
             if let updated = bridgeService.lastUpdated {
                 Text("Updated: \(updated.formatted(date: .omitted, time: .shortened))")
             }
-            Text("NOAA Tides & Currents · Station 1611347 · Hanalei, Kauai")
+            Text("USGS Water Services · Site 16103000 · Hanalei River, Kauai")
         }
         .font(.system(size: 11))
         .foregroundColor(AppTheme.textTertiary)

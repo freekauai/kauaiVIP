@@ -172,7 +172,9 @@ class TimesheetStore: ObservableObject {
             lastSaveError = nil
         } catch {
             lastSaveError = error.localizedDescription
-            print("⚠️ KauaiVIP: Failed to save periods: \(error)")
+            #if DEBUG
+            print("⚠️ RunSheet: Failed to save periods: \(error)")
+            #endif
         }
     }
 

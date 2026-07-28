@@ -159,7 +159,7 @@ struct TripFormView: View {
                                             Text("Countdown Timer")
                                                 .font(.system(size: 15, weight: .semibold))
                                                 .foregroundColor(AppTheme.textPrimary)
-                                            Text("Live countdown (HST) to this trip's first time")
+                                            Text("Live countdown (HST) to this trip's next time")
                                                 .font(.system(size: 12))
                                                 .foregroundColor(AppTheme.textTertiary)
                                         }

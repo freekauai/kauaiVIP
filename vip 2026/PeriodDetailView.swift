@@ -410,24 +410,24 @@ struct TripCard: View {
                 // Date column
                 VStack(spacing: 1) {
                     Text(trip.date.formatted(.dateTime.day()))
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.system(size: 26, weight: .bold))
                         .foregroundColor(AppTheme.textPrimary)
                     Text(trip.date.formatted(.dateTime.month(.abbreviated)))
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(AppTheme.textTertiary)
                 }
-                .frame(width: 34)
+                .frame(width: 46)
 
-                Divider().frame(height: 36).background(AppTheme.oceanLight)
+                Divider().frame(height: 52).background(AppTheme.oceanLight)
 
                 // Main info
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     // Service / vehicle row
                     HStack(spacing: 4) {
-                        Text(trip.vehicle.icon).font(.system(size: 12))
-                        Text(trip.service.icon).font(.system(size: 12))
+                        Text(trip.vehicle.icon).font(.system(size: 16))
+                        Text(trip.service.icon).font(.system(size: 16))
                         Text(trip.service.rawValue)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 17, weight: .semibold))
                             .foregroundColor(AppTheme.textPrimary)
                         if isHighlightedNow {
                             Image(systemName: "star.fill")
@@ -454,27 +454,43 @@ struct TripCard: View {
                                 .cornerRadius(4)
                         }
                     }
-                    // Client
+                    // Client — the card's headline
                     Text(trip.clientName)
-                        .font(.system(size: 12))
-                        .foregroundColor(AppTheme.textSecondary)
+                        .font(.system(size: 19, weight: .bold))
+                        .foregroundColor(AppTheme.textPrimary)
                         .lineLimit(1)
-                    // Times
+                        .minimumScaleFactor(0.7)
+                    // Times — one row when they fit, else a 2×2 grid so the
+                    // bigger chips never wrap their values.
                     if trip.hasPUTime || trip.hasDOTime || trip.hasLeftBase || trip.hasBackBase {
-                        HStack(spacing: 8) {
-                            if trip.hasPUTime   { TimeChip(label: "PU", value: trip.formattedPickup) }
-                            if trip.hasDOTime   { TimeChip(label: "DO", value: trip.formattedDropoff) }
-                            if trip.hasLeftBase { TimeChip(label: "LB", value: trip.formattedLeftBase) }
-                            if trip.hasBackBase { TimeChip(label: "BB", value: trip.formattedBackBase) }
+                        let chips: [(String, String)] = [
+                            trip.hasPUTime   ? ("PU", trip.formattedPickup)   : nil,
+                            trip.hasDOTime   ? ("DO", trip.formattedDropoff)  : nil,
+                            trip.hasLeftBase ? ("LB", trip.formattedLeftBase) : nil,
+                            trip.hasBackBase ? ("BB", trip.formattedBackBase) : nil,
+                        ].compactMap { $0 }
+
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 8) {
+                                ForEach(chips, id: \.0) { TimeChip(label: $0.0, value: $0.1) }
+                            }
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 8) {
+                                    ForEach(Array(chips.prefix(2)), id: \.0) { TimeChip(label: $0.0, value: $0.1) }
+                                }
+                                HStack(spacing: 8) {
+                                    ForEach(Array(chips.dropFirst(2)), id: \.0) { TimeChip(label: $0.0, value: $0.1) }
+                                }
+                            }
                         }
                     }
                     // Notes
                     if !trip.notes.isEmpty {
                         Text(trip.notes)
-                            .font(.system(size: 11))
+                            .font(.system(size: 13))
                             .foregroundColor(AppTheme.textTertiary)
                             .italic()
-                            .lineLimit(2)
+                            .lineLimit(3)
                     }
                 }
 
@@ -487,9 +503,9 @@ struct TripCard: View {
                     // Live countdown to this trip's first time
                     if let cd = countdownText {
                         HStack(spacing: 3) {
-                            Image(systemName: "timer").font(.system(size: 9))
+                            Image(systemName: "timer").font(.system(size: 11))
                             Text(cd)
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(size: 14, weight: .bold))
                                 .monospacedDigit()
                         }
                         .foregroundColor(AppTheme.coral)
@@ -551,15 +567,19 @@ private struct TimeChip: View {
     var body: some View {
         VStack(spacing: 2) {
             Text(label)
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundColor(AppTheme.textTertiary)
                 .tracking(0.5)
+                .lineLimit(1)
+                .fixedSize()
             Text(value)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundColor(AppTheme.textPrimary)
+                .lineLimit(1)
+                .fixedSize()
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
         .background(AppTheme.oceanLight.opacity(0.5))
         .cornerRadius(6)
     }

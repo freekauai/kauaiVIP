@@ -1,9 +1,11 @@
 // ╔══════════════════════════════════════════════════════════════╗
-// ║           KAUAI VIP 2026 — NOAA Bridge & Traffic Service    ║
+// ║           RUNSHEET — USGS Bridge & Traffic Service          ║
 // ║           BridgeService.swift                                ║
 // ╚══════════════════════════════════════════════════════════════╝
 //
-// NOAA Tides & Currents — station 1611347 (Hanalei, Kauai)
+// USGS Water Services — site 16103000 (Hanalei River nr Hanalei, Kauai).
+// Replaced NOAA station 1611347, which is Port Allen on the SOUTH shore and
+// offers no real-time water level — so the bridge status was never live.
 // Bridge thresholds:
 //   < 5.0 ft  →  OPEN   / Normal
 //   5.0–7.0   →  1-LANE / Caution
@@ -15,12 +17,14 @@ import Combine
 
 // MARK: - Bridge Status Level
 enum BridgeLevel: String {
+    case unknown = "Unknown"   // no live gauge reading — never claim "Open"
     case normal  = "Normal"
     case caution = "Caution"
     case closed  = "Closed"
 
     var statusColor: Color {
         switch self {
+        case .unknown: return AppTheme.textTertiary
         case .normal:  return AppTheme.success
         case .caution: return AppTheme.warning
         case .closed:  return AppTheme.error
@@ -28,6 +32,7 @@ enum BridgeLevel: String {
     }
     var trafficLabel: String {
         switch self {
+        case .unknown: return "—"
         case .normal:  return "Normal"
         case .caution: return "Heavy"
         case .closed:  return "Severe"
@@ -35,6 +40,7 @@ enum BridgeLevel: String {
     }
     var bridgeLabel: String {
         switch self {
+        case .unknown: return "Status unavailable"
         case .normal:  return "Open"
         case .caution: return "1-Lane"
         case .closed:  return "CLOSED"
@@ -42,6 +48,7 @@ enum BridgeLevel: String {
     }
     var bannerIcon: String {
         switch self {
+        case .unknown: return "❓"
         case .normal:  return "🚦"
         case .caution: return "⚠️"
         case .closed:  return "🚨"
@@ -49,6 +56,7 @@ enum BridgeLevel: String {
     }
     var sfSymbol: String {
         switch self {
+        case .unknown: return "questionmark.circle.fill"
         case .normal:  return "checkmark.circle.fill"
         case .caution: return "exclamationmark.triangle.fill"
         case .closed:  return "xmark.octagon.fill"
@@ -56,20 +64,23 @@ enum BridgeLevel: String {
     }
 }
 
-// MARK: - NOAA Response Models
-private struct NOAAResponse: Decodable {
-    let data:  [NOAAReading]?
-    let error: NOAAError?
-}
-private struct NOAAReading: Decodable {
-    let t: String
-    let v: String
-    let s: String?
-    let f: String?
-    let q: String?
-}
-private struct NOAAError: Decodable {
-    let message: String
+// MARK: - USGS Instantaneous Values Response Models
+// waterservices.usgs.gov/nwis/iv — gage height (parameter 00065), feet.
+private struct USGSResponse: Decodable {
+    struct Value: Decodable {
+        struct TimeSeries: Decodable {
+            struct Values: Decodable {
+                struct Reading: Decodable {
+                    let value:    String
+                    let dateTime: String
+                }
+                let value: [Reading]
+            }
+            let values: [Values]
+        }
+        let timeSeries: [TimeSeries]
+    }
+    let value: Value
 }
 
 // MARK: - Route Info
@@ -98,13 +109,16 @@ private let kDefaultRoutes: [KauaiRoute] = [
 class BridgeService: ObservableObject {
 
     // MARK: Threshold constants (single source of truth)
-    static let cautionFt: Double = 5.0   // < cautionFt  → Normal / Open
-    static let closedFt:  Double = 7.0   // ≥ closedFt   → Closed
-    static let gaugeFt:   Double = 10.0  // visual gauge maximum
+    // Tuned to the USGS Hanalei River gauge (16103000), where normal flow sits
+    // near 0–2 ft. Heuristic — the exact bridge-closure stage is not published
+    // in a machine-readable feed, so treat these as advisory, not authoritative.
+    static let cautionFt: Double = 6.0   // < cautionFt  → Normal / Open
+    static let closedFt:  Double = 9.0   // ≥ closedFt   → Closed (flood stage)
+    static let gaugeFt:   Double = 12.0  // visual gauge maximum
 
-    @Published var bridgeStatus: String      = "Open"
-    @Published var trafficLevel: String      = "Normal"
-    @Published var level:        BridgeLevel = .normal
+    @Published var bridgeStatus: String      = BridgeLevel.unknown.bridgeLabel
+    @Published var trafficLevel: String      = BridgeLevel.unknown.trafficLabel
+    @Published var level:        BridgeLevel = .unknown
     @Published var waterLevelFt: String      = "N/A"
     @Published var rawWaterFt:   Double?     = nil
     @Published var routes:       [KauaiRoute] = kDefaultRoutes
@@ -115,7 +129,7 @@ class BridgeService: ObservableObject {
     // MARK: Gauge helpers (consumed by views)
     var gaugePct: Double {
         guard let raw = rawWaterFt else { return 0 }
-        // Clamp to 0…1 — NOAA can report negative levels (tide below datum).
+        // Clamp to 0…1 — the gauge can report slightly negative stage.
         return max(0, min(raw / BridgeService.gaugeFt, 1.0))
     }
     var gaugeColor: Color {
@@ -125,7 +139,7 @@ class BridgeService: ObservableObject {
              : AppTheme.success
     }
 
-    private let stationID = "1611347"
+    private let stationID = "16103000"   // USGS — Hanalei River nr Hanalei, Kauai
     private var refreshTimer: Timer?
 
     /// Minimum seconds between manual refreshes. Auto-timer is unaffected.
@@ -150,7 +164,7 @@ class BridgeService: ObservableObject {
     }
 
     // MARK: - Fetch with exponential back-off (max 3 retries)
-    /// Retries on both network errors and NOAA API error payloads.
+    /// Retries on network errors and unusable/missing gauge readings.
     /// Delays: 1 s → 2 s → 4 s before giving up.
     private func fetchWithRetry(attempt: Int) async {
         // Only reset loading/error on the first attempt
@@ -159,24 +173,15 @@ class BridgeService: ObservableObject {
             fetchError = nil
         }
 
-        let dateFmt = DateFormatter()
-        dateFmt.dateFormat = "yyyyMMdd"
-        let today = dateFmt.string(from: Date())
-
-        guard var components = URLComponents(string: "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter") else {
+        guard var components = URLComponents(string: "https://waterservices.usgs.gov/nwis/iv/") else {
             isLoading = false
             return
         }
         components.queryItems = [
-            .init(name: "product",    value: "water_level"),
-            .init(name: "station",    value: stationID),
-            .init(name: "datum",      value: "MLLW"),
-            .init(name: "time_zone",  value: "lst_ldt"),
-            .init(name: "units",      value: "english"),
-            .init(name: "format",     value: "json"),
-            .init(name: "begin_date", value: today),
-            .init(name: "end_date",   value: today),
-            .init(name: "interval",   value: "h"),
+            .init(name: "format",      value: "json"),
+            .init(name: "sites",       value: stationID),
+            .init(name: "parameterCd", value: "00065"),   // gage height, feet
+            .init(name: "siteStatus",  value: "all"),
         ]
 
         guard let url = components.url else { isLoading = false; return }
@@ -190,30 +195,14 @@ class BridgeService: ObservableObject {
                 throw URLError(.badServerResponse)
             }
 
-            let noaaResponse = try JSONDecoder().decode(NOAAResponse.self, from: data)
+            let usgs = try JSONDecoder().decode(USGSResponse.self, from: data)
 
-            // NOAA returns an error object when data is unavailable.
-            // Retry with back-off before giving up.
-            if noaaResponse.error != nil {
-                if attempt < 3 {
-                    let delaySec = pow(2.0, Double(attempt))   // 1 s, 2 s, 4 s
-                    try? await Task.sleep(nanoseconds: UInt64(delaySec * 1_000_000_000))
-                    await fetchWithRetry(attempt: attempt + 1)
-                } else {
-                    waterLevelFt = "Unavailable"
-                    lastUpdated  = Date()
-                    isLoading    = false
-                }
-                return
-            }
-
-            guard let readings = noaaResponse.data,
-                  let latest   = readings.last(where: { !$0.v.trimmingCharacters(in: .whitespaces).isEmpty }),
-                  let wl       = Double(latest.v) else {
-                // Station has no recent readings — show a neutral state, not an error.
-                waterLevelFt = "Unavailable"
-                lastUpdated  = Date()
-                isLoading    = false
+            // Latest non-sentinel gage-height reading (USGS uses -999999 for gaps).
+            guard let readings = usgs.value.timeSeries.first?.values.first?.value,
+                  let latest   = readings.last(where: { $0.value != "-999999" && !$0.value.isEmpty }),
+                  let wl       = Double(latest.value) else {
+                // No usable reading — say so rather than implying the bridge is open.
+                markUnavailable()
                 return
             }
 
@@ -230,8 +219,7 @@ class BridgeService: ObservableObject {
                 try? await Task.sleep(nanoseconds: UInt64(delaySec * 1_000_000_000))
                 await fetchWithRetry(attempt: attempt + 1)
             } else {
-                waterLevelFt = "Unavailable"
-                isLoading    = false
+                markUnavailable()
             }
         }
     }
@@ -243,6 +231,19 @@ class BridgeService: ObservableObject {
     }
 
     // MARK: - Threshold logic
+    /// No live reading — surface an explicit unknown state instead of leaving
+    /// the optimistic "Open / Normal" defaults on screen.
+    private func markUnavailable() {
+        rawWaterFt   = nil
+        waterLevelFt = "Unavailable"
+        level        = .unknown
+        bridgeStatus = level.bridgeLabel
+        trafficLevel = level.trafficLabel
+        updateRoutes(level: .normal)   // no delay data — keep base route times
+        lastUpdated  = Date()
+        isLoading    = false
+    }
+
     private func applyThreshold(_ wl: Double) {
         switch wl {
         case ..<BridgeService.cautionFt:                                        level = .normal

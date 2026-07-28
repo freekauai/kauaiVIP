@@ -146,11 +146,23 @@ struct Trip: Identifiable, Codable {
         return result
     }
 
-    /// Driver duty time: first time point → last time point (handles overnight).
+    /// Charter billing time: pickup → drop-off, plus a 1-hour travel
+    /// allowance. Left Base / Back Base are still recorded and shown on
+    /// trips and PDFs, but are NOT part of this calculation. Requires both
+    /// a pickup and a drop-off time; an overnight drop-off (past midnight)
+    /// rolls to the next day so the math stays correct.
     var charterDuration: TimeInterval? {
-        let times = orderedTimes
-        guard let start = times.first, let end = times.last, end > start else { return nil }
-        return end.timeIntervalSince(start)
+        guard hasPUTime, let pu = pickupTime,
+              hasDOTime, let dropoff = dropoffTime else { return nil }
+        let cal   = Calendar.current
+        let start = onTripDate(pu)
+        var end   = onTripDate(dropoff)
+        while end < start {
+            end = cal.date(byAdding: .day, value: 1, to: end)
+                ?? end.addingTimeInterval(86_400)
+        }
+        guard end > start else { return nil }
+        return end.timeIntervalSince(start) + 3_600   // +1h travel allowance
     }
 
     /// The trip's start time (first chronological field); used for countdowns.
@@ -497,7 +509,7 @@ func csvQuote(_ s: String) -> String {
 
 // MARK: - Aggregate Trip Statistics
 /// Single source of truth for the numbers shown on the Stats screen and in the
-/// PDF export. `charterDuration` (latest entered time − earliest) is the duty
+/// PDF export. `charterDuration` (drop-off − pickup, +1h travel) is the duty
 /// span of a trip; charter hours sum that over charter trips, duty hours over all.
 struct TripStats {
     let total:        Int

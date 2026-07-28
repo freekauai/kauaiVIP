@@ -4,7 +4,7 @@
 // ╚══════════════════════════════════════════════════════════════╝
 //
 // Weather: Open-Meteo (free, no API key, no entitlement needed)
-// Bridge:  NOAA Tides & Currents (free, no key)
+// Bridge:  USGS Water Services (free, no key)
 // Maps:    Apple MapKit (built-in)
 // Auth:    LocalAuthentication (built-in, no capability needed)
 //
