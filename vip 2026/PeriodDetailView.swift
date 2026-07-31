@@ -16,6 +16,7 @@ struct PeriodDetailView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var showAddTrip  = false
+    @State private var showPasteImport = false
     @State private var editingTrip: Trip? = nil
     @State private var tripToDelete: Trip? = nil
     @State private var showDeleteAlert = false
@@ -27,6 +28,8 @@ struct PeriodDetailView: View {
     @State private var undoableTrip: Trip? = nil
     // Undo toast for a just-deleted trip
     @State private var deletedTrip: Trip? = nil
+    @State private var deleteToastToken = UUID()
+    @State private var toggleToastToken = UUID()
 
     // Global countdown on/off — shared across views via @AppStorage
     @AppStorage("countdownEnabled") private var countdownEnabled: Bool = true
@@ -100,6 +103,10 @@ struct PeriodDetailView: View {
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
+                    Button(action: { showPasteImport = true }) {
+                        Label("Paste Trips from Text", systemImage: "doc.on.clipboard")
+                    }
+                    Divider()
                     Button(action: exportPDF) {
                         Label("Export PDF", systemImage: "doc.fill")
                     }
@@ -183,6 +190,10 @@ struct PeriodDetailView: View {
             SettingsView()
                 .environmentObject(store)
         }
+        .sheet(isPresented: $showPasteImport) {
+            PasteImportView(periodID: periodID)
+                .environmentObject(store)   // sheets don't inherit env objects
+        }
         .sheet(isPresented: $showAddTrip) {
             TripFormView(periodID: periodID, existingTrip: nil)
                 .environmentObject(store)            // sheets don't inherit env objects
@@ -200,9 +211,14 @@ struct PeriodDetailView: View {
                 store.deleteTrip(trip, fromPeriod: periodID)
                 UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 // Same undo toast used for activate/deactivate — restores the trip.
-                withAnimation { deletedTrip = trip }
+                let token = UUID()
+                deleteToastToken = token
+                withAnimation {
+                    undoableTrip = nil          // one toast slot — don't stack
+                    deletedTrip  = trip
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                    withAnimation { if deletedTrip?.id == trip.id { deletedTrip = nil } }
+                    withAnimation { if deleteToastToken == token { deletedTrip = nil } }
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -360,10 +376,15 @@ struct PeriodDetailView: View {
                             store.updateTrip(updated, inPeriod: periodID)
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             // Show undo toast; prevState carries the original isActive value.
-                            withAnimation { undoableTrip = prevState }
+                            let token = UUID()
+                            toggleToastToken = token
+                            withAnimation {
+                                deletedTrip  = nil   // one toast slot — don't stack
+                                undoableTrip = prevState
+                            }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                                 withAnimation {
-                                    if undoableTrip?.id == prevState.id { undoableTrip = nil }
+                                    if toggleToastToken == token { undoableTrip = nil }
                                 }
                             }
                         }

@@ -230,7 +230,16 @@ struct TripFormView: View {
             } message: {
                 Text(validationMsg)
             }
-            .onAppear { populateIfEditing() }
+            .onAppear {
+                populateIfEditing()
+                // New trip in a past/future period: Date() sits outside the
+                // pay period — clamp so the picker and the saved trip agree.
+                // ONLY for new trips: an existing trip dated outside the period
+                // (e.g. paste-imported) must keep its real date when edited.
+                if !isEditing, !dateRange.contains(date) {
+                    date = min(max(date, dateRange.lowerBound), dateRange.upperBound)
+                }
+            }
         }
     }
 

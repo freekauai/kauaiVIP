@@ -198,11 +198,12 @@ class BridgeService: ObservableObject {
 
             let usgs = try JSONDecoder().decode(USGSResponse.self, from: data)
 
-            // Latest non-sentinel gage-height reading (USGS uses -999999 for gaps).
+            // Latest VALID gage-height reading — skip back past empty values and
+            // -999999-style sentinels (USGS marks gaps that way), so one bad
+            // trailing interval doesn't wipe out a payload full of good data.
             guard let readings = usgs.value.timeSeries.first?.values.first?.value,
-                  let latest   = readings.last(where: { !$0.value.isEmpty }),
-                  let wl       = Double(latest.value),
-                  (-100.0..<100.0).contains(wl) else {   // rejects -999999-style sentinels in any format
+                  let wl = readings.reversed().compactMap({ Double($0.value) })
+                      .first(where: { (-100.0..<100.0).contains($0) }) else {
                 // No usable reading — say so rather than implying the bridge is open.
                 markUnavailable()
                 return

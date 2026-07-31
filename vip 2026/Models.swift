@@ -177,7 +177,12 @@ struct Trip: Identifiable, Codable {
     var dutySpan: TimeInterval? {
         let times = orderedTimes
         guard let start = times.first, let end = times.last, end > start else { return nil }
-        return end.timeIntervalSince(start)
+        let span = end.timeIntervalSince(start)
+        // Same data-entry guard as the billing rule: a time typed slightly
+        // out of order rolls ~24h "overnight" — exclude it rather than
+        // inflating the Duty Hrs stat with a phantom day.
+        guard span < 16 * 3_600 else { return nil }
+        return span
     }
 
     /// The trip's start time (first chronological field); used for countdowns.
@@ -524,7 +529,7 @@ func csvQuote(_ s: String) -> String {
 
 // MARK: - Aggregate Trip Statistics
 /// Single source of truth for the numbers shown on the Stats screen and in the
-/// PDF export. `charterDuration` (drop-off − pickup, +1h travel) is the duty
+/// PDF export. `charterDuration` (drop-off − pickup, +1h travel) is the billing
 /// span of a trip; charter hours sum that over charter trips, duty hours over all.
 struct TripStats {
     let total:        Int
