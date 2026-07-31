@@ -78,6 +78,10 @@ struct MainView: View {
                         }
                         .padding(.bottom, 100) // FAB clearance
                     }
+                    .refreshable {
+                        weatherManager.refresh()
+                        bridgeService.refresh()
+                    }
                 }
 
                 // ── Floating Add Button ───────────────────────────────
@@ -141,7 +145,7 @@ struct MainView: View {
         // Same blue band as the trips page — the top of every page is
         // identical down through the driver's name. One chip per
         // countdown-enabled trip (soonest first) across all periods.
-        let enabled = store.periods.flatMap(\.trips)
+        let enabled = (countdownEnabled ? store.periods.flatMap(\.trips) : [])
             .filter { $0.isActive && $0.showCountdown }
             .compactMap { trip -> (String, Date)? in
                 guard let t = trip.nextUpcomingTime(after: now) else { return nil }

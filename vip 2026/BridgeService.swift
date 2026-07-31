@@ -6,10 +6,10 @@
 // USGS Water Services — site 16103000 (Hanalei River nr Hanalei, Kauai).
 // Replaced NOAA station 1611347, which is Port Allen on the SOUTH shore and
 // offers no real-time water level — so the bridge status was never live.
-// Bridge thresholds:
-//   < 5.0 ft  →  OPEN   / Normal
-//   5.0–7.0   →  1-LANE / Caution
-//   > 7.0 ft  →  CLOSED / Severe
+// Bridge thresholds (river stage — advisory heuristics, see constants):
+//   < 6.0 ft  →  OPEN   / Normal
+//   6.0–9.0   →  1-LANE / Caution
+//   ≥ 9.0 ft  →  CLOSED / Severe
 
 import Foundation
 import SwiftUI
@@ -164,7 +164,8 @@ class BridgeService: ObservableObject {
     }
 
     // MARK: - Fetch with exponential back-off (max 3 retries)
-    /// Retries on network errors and unusable/missing gauge readings.
+    /// Retries on network errors; missing/sentinel readings mark the
+    /// status unavailable immediately (no point retrying a dry gauge).
     /// Delays: 1 s → 2 s → 4 s before giving up.
     private func fetchWithRetry(attempt: Int) async {
         // Only reset loading/error on the first attempt
@@ -199,15 +200,18 @@ class BridgeService: ObservableObject {
 
             // Latest non-sentinel gage-height reading (USGS uses -999999 for gaps).
             guard let readings = usgs.value.timeSeries.first?.values.first?.value,
-                  let latest   = readings.last(where: { $0.value != "-999999" && !$0.value.isEmpty }),
-                  let wl       = Double(latest.value) else {
+                  let latest   = readings.last(where: { !$0.value.isEmpty }),
+                  let wl       = Double(latest.value),
+                  (-100.0..<100.0).contains(wl) else {   // rejects -999999-style sentinels in any format
                 // No usable reading — say so rather than implying the bridge is open.
                 markUnavailable()
                 return
             }
 
             rawWaterFt   = wl
-            waterLevelFt = String(format: "%.2f ft", wl)
+            // Tide influence can pull the gauge slightly negative; showing
+            // "-0.01 ft" reads like a glitch, so floor the display at zero.
+            waterLevelFt = String(format: "%.2f ft", max(0, wl))
             applyThreshold(wl)
             lastUpdated  = Date()
             isLoading    = false

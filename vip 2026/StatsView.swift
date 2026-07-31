@@ -81,13 +81,13 @@ struct StatsView: View {
         switch scope {
         case .allTime:
             sections = [("All Trips", allTrips)]
-            filename = "KauaiVIP_AllTime.pdf"
+            filename = "RunSheet_AllTime.pdf"
         case .periods:
             sections = store.periods.map { ($0.label, $0.trips) }
-            filename = "KauaiVIP_Periods.pdf"
+            filename = "RunSheet_Periods.pdf"
         case .monthly:
             sections = monthlyGroups()
-            filename = "KauaiVIP_Monthly.pdf"
+            filename = "RunSheet_Monthly.pdf"
         }
         let data = makeStatsPDF(
             title: "\(scope.rawValue) Report",
@@ -121,7 +121,7 @@ struct StatsView: View {
             }
             csv = rows.joined(separator: "\n")
         }
-        shareFile(data: Data(csv.utf8), filename: "KauaiVIP_\(scope.rawValue.replacingOccurrences(of: " ", with: "")).csv")
+        shareFile(data: Data(csv.utf8), filename: "RunSheet_\(scope.rawValue.replacingOccurrences(of: " ", with: "")).csv")
     }
 
     // MARK: - All Time

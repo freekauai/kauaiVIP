@@ -161,10 +161,9 @@ struct DriverBand: View {
             }
 
             if !countdowns.isEmpty {
-                // One chip per countdown-enabled trip, side by side.
-                // Scrolls horizontally if more fit than the screen allows.
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                // One chip per countdown-enabled trip, side by side —
+                // centered for a few chips, horizontally scrollable for many.
+                let chipRow = HStack(spacing: 8) {
                         ForEach(Array(countdowns.enumerated()), id: \.offset) { _, chip in
                             VStack(spacing: 1) {
                                 Text(chip.label)
@@ -180,10 +179,20 @@ struct DriverBand: View {
                             .padding(.vertical, 6)
                             .background(AppTheme.oceanDeep.opacity(0.12))
                             .cornerRadius(10)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(chip.label), next time in \(chip.value)")
+                        }
+                }
+                Group {
+                    if countdowns.count <= 3 {
+                        chipRow
+                            .frame(maxWidth: .infinity)   // actually centers outside a ScrollView
+                            .padding(.horizontal, 12)
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            chipRow.padding(.horizontal, 12)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .frame(maxWidth: .infinity)   // centers when chips don't fill the width
                 }
                 .padding(.top, 4)
             } else if let countdown {

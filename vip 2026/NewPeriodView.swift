@@ -162,6 +162,7 @@ struct NewPeriodView: View {
         }
         let period = PayPeriod(startDate: startDate, endDate: endDate)
         store.addPeriod(period)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         dismiss()
     }
 }

@@ -161,8 +161,23 @@ struct Trip: Identifiable, Codable {
             end = cal.date(byAdding: .day, value: 1, to: end)
                 ?? end.addingTimeInterval(86_400)
         }
-        guard end > start else { return nil }
-        return end.timeIntervalSince(start) + 3_600   // +1h travel allowance
+        let span = end.timeIntervalSince(start)
+        // Sanity cap: a drop-off entered a few minutes BEFORE the pickup
+        // (data-entry slip) would roll "overnight" into a ~24h bill. Real
+        // charters never run this long, so treat it as invalid instead of
+        // silently inflating the period's charter hours.
+        guard span < 16 * 3_600 else { return nil }
+        return span + 3_600   // +1h travel allowance (PU == DO still bills 1h)
+    }
+
+    /// Full duty span: first entered time point → last (LB → PU → DO → BB,
+    /// date-anchored, overnight-aware). Used for the "Duty Hrs" stat — the
+    /// driver's actual time on the road — as opposed to `charterDuration`,
+    /// which is the billing rule (PU→DO + 1h, LB/BB excluded).
+    var dutySpan: TimeInterval? {
+        let times = orderedTimes
+        guard let start = times.first, let end = times.last, end > start else { return nil }
+        return end.timeIntervalSince(start)
     }
 
     /// The trip's start time (first chronological field); used for countdowns.
@@ -535,7 +550,7 @@ struct TripStats {
         let charterDurations = charterTrips.compactMap(\.charterDuration)
         charterSeconds        = charterDurations.reduce(0, +)
         charterWithDuration   = charterDurations.count
-        dutySeconds           = trips.compactMap(\.charterDuration).reduce(0, +)
+        dutySeconds           = trips.compactMap(\.dutySpan).reduce(0, +)
         longestCharterSeconds = charterDurations.max()
 
         var wk = [Int](repeating: 0, count: 7)

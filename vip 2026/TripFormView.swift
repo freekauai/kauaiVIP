@@ -10,6 +10,15 @@ struct TripFormView: View {
     let existingTrip: Trip?
 
     @EnvironmentObject var store:         TimesheetStore
+
+    /// Keep the trip date inside its pay period so a trip can't silently
+    /// land outside the period it belongs to.
+    private var dateRange: ClosedRange<Date> {
+        guard let period = store.periods.first(where: { $0.id == periodID }) else {
+            return Date.distantPast...Date.distantFuture
+        }
+        return min(period.startDate, period.endDate)...max(period.startDate, period.endDate)
+    }
     @EnvironmentObject var bridgeService: BridgeService
     @Environment(\.dismiss) var dismiss
 
@@ -101,7 +110,9 @@ struct TripFormView: View {
                             AppCard {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("TRIP DATE").labelStyle()
-                                    DatePicker("Date", selection: $date, displayedComponents: .date)
+                                    DatePicker("Date", selection: $date,
+                                               in: dateRange,
+                                               displayedComponents: .date)
                                         .datePickerStyle(.graphical)
                                         .labelsHidden()
                                         .accentColor(AppTheme.coral)
@@ -192,7 +203,18 @@ struct TripFormView: View {
             .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(AppTheme.oceanDeep, for: .navigationBar)
+            // Drag to dismiss the keyboard; without this it covers the Save
+            // button with no obvious way out on small screens.
+            .scrollDismissesKeyboard(.interactively)
             .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                        to: nil, from: nil, for: nil)
+                    }
+                    .fontWeight(.semibold)
+                }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
                         .foregroundColor(AppTheme.coral)
@@ -252,6 +274,7 @@ struct TripFormView: View {
         } else {
             store.addTrip(trip, toPeriod: periodID)
         }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         dismiss()
     }
 }

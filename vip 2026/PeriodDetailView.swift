@@ -25,6 +25,8 @@ struct PeriodDetailView: View {
 
     // Undo toast for isActive toggle (issue #10)
     @State private var undoableTrip: Trip? = nil
+    // Undo toast for a just-deleted trip
+    @State private var deletedTrip: Trip? = nil
 
     // Global countdown on/off — shared across views via @AppStorage
     @AppStorage("countdownEnabled") private var countdownEnabled: Bool = true
@@ -61,6 +63,10 @@ struct PeriodDetailView: View {
                             AppFooter()
                         }
                         .padding(.bottom, 100)
+                    }
+                    .refreshable {
+                        weatherManager.refresh()
+                        bridgeService.refresh()
                     }
                 }
 
@@ -117,6 +123,34 @@ struct PeriodDetailView: View {
         // Do NOT manually connect/cancel the upstream — doing so permanently
         // kills the timer so it never resumes when the view reappears.
         .onReceive(tripTimer) { now = $0 }
+        // Undo toast overlay (delete)
+        .overlay(alignment: .bottom) {
+            if let dt = deletedTrip {
+                HStack(spacing: 12) {
+                    Image(systemName: "trash")
+                        .foregroundColor(AppTheme.error)
+                    Text("Trip deleted")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(AppTheme.textPrimary)
+                    Spacer()
+                    Button("Undo") {
+                        store.addTrip(dt, toPeriod: periodID)
+                        withAnimation { deletedTrip = nil }
+                    }
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(AppTheme.coral)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(AppTheme.oceanMedium)
+                .cornerRadius(12)
+                .shadow(color: .black.opacity(0.35), radius: 10, x: 0, y: 4)
+                .padding(.horizontal, AppTheme.screenPad)
+                .padding(.bottom, 90)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: deletedTrip?.id)
         // Undo toast overlay
         .overlay(alignment: .bottom) {
             if let ut = undoableTrip {
@@ -164,6 +198,12 @@ struct PeriodDetailView: View {
         .alert("Delete Trip?", isPresented: $showDeleteAlert, presenting: tripToDelete) { trip in
             Button("Delete", role: .destructive) {
                 store.deleteTrip(trip, fromPeriod: periodID)
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                // Same undo toast used for activate/deactivate — restores the trip.
+                withAnimation { deletedTrip = trip }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                    withAnimation { if deletedTrip?.id == trip.id { deletedTrip = nil } }
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: { trip in
@@ -184,7 +224,7 @@ struct PeriodDetailView: View {
     private var driverHeader: some View {
         // One chip per countdown-enabled trip, soonest first, each counting
         // to that trip's next upcoming time point.
-        let enabled = (period?.trips ?? [])
+        let enabled = (countdownEnabled ? (period?.trips ?? []) : [])
             .filter { $0.isActive && $0.showCountdown }
             .compactMap { trip -> (String, Date)? in
                 guard let t = trip.nextUpcomingTime(after: now) else { return nil }
@@ -318,6 +358,7 @@ struct PeriodDetailView: View {
                             var updated   = trip
                             updated.isActive.toggle()
                             store.updateTrip(updated, inPeriod: periodID)
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             // Show undo toast; prevState carries the original isActive value.
                             withAnimation { undoableTrip = prevState }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
@@ -392,7 +433,7 @@ struct TripCard: View {
     /// user enables the per-trip Countdown toggle and the trip has a future
     /// time. Past trips show nothing.
     private var countdownText: String? {
-        guard trip.showCountdown,
+        guard countdownEnabled, trip.showCountdown,
               let target = trip.nextUpcomingTime(after: now) else { return nil }
         let interval = target.timeIntervalSince(now)
         guard interval > 0 else { return nil }       // past trips: no "Departed" noise
