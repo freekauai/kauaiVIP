@@ -280,9 +280,21 @@ struct PasteImportView: View {
 
                 HStack(spacing: 10) {
                     Button {
-                        if let clip = UIPasteboard.general.string {
+                        if let clip = UIPasteboard.general.string, !clip.isEmpty {
                             rawText = clip
                             runParse()
+                        } else if let provider = UIPasteboard.general.itemProviders.first,
+                                  provider.canLoadObject(ofClass: NSString.self) {
+                            // The synchronous string can be nil right after the
+                            // permission grant (promised items) — load async.
+                            _ = provider.loadObject(ofClass: NSString.self) { obj, _ in
+                                if let str = obj as? String, !str.isEmpty {
+                                    DispatchQueue.main.async {
+                                        rawText = str
+                                        runParse()
+                                    }
+                                }
+                            }
                         }
                     } label: {
                         Label("Paste from Clipboard", systemImage: "doc.on.clipboard")
@@ -309,42 +321,70 @@ struct PasteImportView: View {
 
     private var previewList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("FOUND \(parsed.count) RUN\(parsed.count == 1 ? "" : "S") — TAP TO INCLUDE/EXCLUDE")
+            Text("FOUND \(parsed.count) RUN\(parsed.count == 1 ? "" : "S") — TAP ✓ TO INCLUDE · FIELDS ARE EDITABLE")
                 .labelStyle()
 
             ForEach($parsed) { $trip in
                 AppCard {
                     HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: trip.include ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 22))
-                            .foregroundColor(trip.include ? AppTheme.success : AppTheme.textTertiary)
+                        // Include/exclude lives on the checkmark only — the
+                        // rest of the card is editable fields.
+                        Button {
+                            trip.include.toggle()
+                        } label: {
+                            Image(systemName: trip.include ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 22))
+                                .foregroundColor(trip.include ? AppTheme.success : AppTheme.textTertiary)
+                                .frame(width: 36, height: 36)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(trip.include ? "Exclude this run" : "Include this run")
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 8) {
-                                Text(trip.date.formatted(.dateTime.month(.abbreviated).day()))
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundColor(AppTheme.textPrimary)
-                                if let pu = trip.pickupTime {
-                                    Text(pu.formatted(date: .omitted, time: .shortened))
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundColor(AppTheme.coral)
+                        VStack(alignment: .leading, spacing: 6) {
+                            // ── Date · pickup time · service — all editable ──
+                            HStack(spacing: 6) {
+                                DatePicker("", selection: $trip.date, displayedComponents: .date)
+                                    .labelsHidden()
+                                    .datePickerStyle(.compact)
+
+                                if trip.pickupTime != nil {
+                                    DatePicker("", selection: Binding(
+                                        get: { trip.pickupTime ?? trip.date },
+                                        set: { trip.pickupTime = $0 }
+                                    ), displayedComponents: .hourAndMinute)
+                                        .labelsHidden()
+                                        .datePickerStyle(.compact)
+                                } else {
+                                    Button {
+                                        trip.pickupTime = Calendar.current.date(
+                                            bySettingHour: 9, minute: 0, second: 0, of: trip.date)
+                                    } label: {
+                                        Label("Time", systemImage: "plus.circle")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundColor(AppTheme.coral)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                Spacer()
-                                // Service is a guess — let the driver flip it here
+                                Spacer(minLength: 0)
                                 Menu {
                                     ForEach(store.allServices) { svc in
                                         Button(svc.rawValue) { trip.service = svc }
                                     }
                                 } label: {
-                                    Text("\(trip.service.icon) \(trip.service.rawValue)")
+                                    Text("\(trip.service.icon) \(trip.service.rawValue) ⌄")
                                         .font(.system(size: 12, weight: .semibold))
                                         .foregroundColor(AppTheme.info)
                                 }
                             }
-                            Text(trip.clientName.isEmpty ? "(no name)" : trip.clientName)
+
+                            // ── Client name — editable ──
+                            TextField("Client name", text: $trip.clientName)
                                 .font(.system(size: 17, weight: .bold))
                                 .foregroundColor(AppTheme.textPrimary)
-                            // Vehicle is a guess too — tappable to correct
+                                .textInputAutocapitalization(.words)
+
+                            // ── Vehicle — tappable to correct ──
                             Menu {
                                 ForEach(store.allVehicles) { v in
                                     Button("\(v.icon) \(v.rawValue)") { trip.vehicle = v }
@@ -354,6 +394,7 @@ struct PasteImportView: View {
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(AppTheme.textSecondary)
                             }
+
                             if trip.isDuplicate {
                                 Label("Possible duplicate — already in this period",
                                       systemImage: "exclamationmark.triangle.fill")
@@ -366,17 +407,14 @@ struct PasteImportView: View {
                                     .font(.system(size: 11, weight: .semibold))
                                     .foregroundColor(AppTheme.warning)
                             }
-                            if !trip.notes.isEmpty {
-                                Text(trip.notes)
-                                    .font(.system(size: 12))
-                                    .foregroundColor(AppTheme.textTertiary)
-                                    .italic()
-                                    .lineLimit(3)
-                            }
+
+                            // ── Notes — editable ──
+                            TextField("Notes", text: $trip.notes, axis: .vertical)
+                                .font(.system(size: 12))
+                                .foregroundColor(AppTheme.textSecondary)
+                                .lineLimit(1...4)
                         }
                     }
-                    .contentShape(Rectangle())
-                    .onTapGesture { trip.include.toggle() }
                 }
                 .opacity(trip.include ? 1.0 : 0.45)
             }
