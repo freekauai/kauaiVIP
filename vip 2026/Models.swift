@@ -283,7 +283,7 @@ struct PayPeriod: Identifiable, Codable, Hashable {
     var isValidLength: Bool {
         (14...16).contains(dayCount)
     }
-    /// Total on-clock time across all trips that have at least two time points.
+    /// Billing time summed over charter trips: PU→DO + 1h each (`charterDuration`).
     var totalCharterDuration: TimeInterval {
         trips.filter { $0.service == .charter }.compactMap(\.charterDuration).reduce(0, +)
     }
@@ -426,17 +426,24 @@ extension PayPeriod {
 
             for (idx, trip) in sorted.enumerated() {
                 let hasNotes = !trip.notes.isEmpty
-                // Dynamic row height: long client names wrap and notes can
-                // span several lines — measure both so rows never overlap.
+                // Dynamic row height: long client / custom vehicle / service
+                // names wrap and notes can span several lines — measure all
+                // of them so rows never overlap.
                 let clientH = measureText(trip.clientName,
                                           font: .systemFont(ofSize: 10, weight: .medium),
                                           width: cols[3].1 - 4)
+                let vehicleH = measureText(trip.vehicle.rawValue,
+                                           font: .systemFont(ofSize: 10),
+                                           width: cols[1].1 - 4)
+                let serviceH = measureText(trip.service.rawValue,
+                                           font: .systemFont(ofSize: 10),
+                                           width: cols[2].1 - 4)
                 let noteH: CGFloat = hasNotes
                     ? measureText("↳  \(trip.notes)",
                                   font: .italicSystemFont(ofSize: 8),
                                   width: contentW - 8)
                     : 0
-                let bodyH = max(14, clientH)
+                let bodyH = max(14, clientH, vehicleH, serviceH)
                 let rowH: CGFloat = 4 + bodyH + (hasNotes ? noteH + 4 : 0) + 4
 
                 if y + rowH > pageH - margin {
@@ -508,8 +515,8 @@ extension PayPeriod {
         for t in trips {
             let row = [
                 csvQuote(t.formattedDate),
-                t.vehicle.rawValue,
-                t.service.rawValue,
+                csvQuote(t.vehicle.rawValue),   // custom names may contain commas
+                csvQuote(t.service.rawValue),
                 csvQuote(t.clientName),
                 t.formattedPickup,
                 t.formattedDropoff,
@@ -524,7 +531,13 @@ extension PayPeriod {
 }
 
 func csvQuote(_ s: String) -> String {
-    "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\""
+    // Flatten newlines (notes are multi-line) — the importer splits the file
+    // on "\n" before parsing quotes, so embedded newlines break round-trips.
+    let flat = s
+        .replacingOccurrences(of: "\r\n", with: " / ")
+        .replacingOccurrences(of: "\n",   with: " / ")
+        .replacingOccurrences(of: "\r",   with: " / ")
+    return "\"\(flat.replacingOccurrences(of: "\"", with: "\"\""))\""
 }
 
 // MARK: - Aggregate Trip Statistics
@@ -536,7 +549,7 @@ struct TripStats {
     let airport:      Int
     let charter:      Int
     let uniqueDays:   Int
-    let charterSeconds: Double          // duty span summed over charter trips
+    let charterSeconds: Double          // billing span (charterDuration) summed over charter trips
     let dutySeconds:    Double          // duty span summed over ALL trips
     let longestCharterSeconds: Double?
     let weekdayCounts:  [Int]           // 7 entries, index 0 = Sunday … 6 = Saturday
@@ -769,17 +782,24 @@ func makeStatsPDF(title: String, sections: [(String, [Trip])], driverName: Strin
             let sorted = trips.sorted { $0.date < $1.date }
             for (idx, trip) in sorted.enumerated() {
                 let hasNotes = !trip.notes.isEmpty
-                // Dynamic row height: long client names wrap and notes can
-                // span several lines — measure both so rows never overlap.
+                // Dynamic row height: long client / custom vehicle / service
+                // names wrap and notes can span several lines — measure all
+                // of them so rows never overlap.
                 let clientH = measureText(trip.clientName,
                                           font: .systemFont(ofSize: 10, weight: .medium),
                                           width: cols[3].1 - 4)
+                let vehicleH = measureText(trip.vehicle.rawValue,
+                                           font: .systemFont(ofSize: 10),
+                                           width: cols[1].1 - 4)
+                let serviceH = measureText(trip.service.rawValue,
+                                           font: .systemFont(ofSize: 10),
+                                           width: cols[2].1 - 4)
                 let noteH: CGFloat = hasNotes
                     ? measureText("↳  \(trip.notes)",
                                   font: .italicSystemFont(ofSize: 8),
                                   width: contentW - 8)
                     : 0
-                let bodyH = max(14, clientH)
+                let bodyH = max(14, clientH, vehicleH, serviceH)
                 let rowH: CGFloat = 4 + bodyH + (hasNotes ? noteH + 4 : 0) + 4
 
                 if y + rowH > pageH - margin {

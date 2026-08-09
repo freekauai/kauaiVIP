@@ -8,7 +8,7 @@
 // Maps:    Apple MapKit (built-in)
 // Auth:    LocalAuthentication (built-in, no capability needed)
 //
-// Minimum Deployment: iOS 16.0
+// Minimum Deployment: iOS 17.0
 // No special capabilities required.
 
 import SwiftUI

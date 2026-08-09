@@ -109,10 +109,10 @@ struct StatsView: View {
             let groups = monthlyGroups()
             var rows = ["Month,Date,Vehicle,Service,Client,PU Time,DO Time,Left Base,Back Base,Notes"]
             for (month, trips) in groups {
-                for t in trips {
+                for t in trips.sorted(by: { $0.date < $1.date }) {
                     rows.append([
-                        csvQuote(month), csvQuote(t.formattedDate), t.vehicle.rawValue,
-                        t.service.rawValue, csvQuote(t.clientName),
+                        csvQuote(month), csvQuote(t.formattedDate), csvQuote(t.vehicle.rawValue),
+                        csvQuote(t.service.rawValue), csvQuote(t.clientName),
                         t.formattedPickup, t.formattedDropoff,
                         t.formattedLeftBase, t.formattedBackBase,
                         csvQuote(t.notes)

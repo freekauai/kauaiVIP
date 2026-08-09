@@ -19,8 +19,12 @@ struct MainView: View {
     @State private var periodToDelete:   PayPeriod? = nil
     @State private var showDeletePeriodAlert = false
     @State private var selectedPeriod:   PayPeriod? = nil
-    @State private var didAutoNavigate   = false
     @State private var now               = Date()
+
+    /// Once per app *launch* — static, not @State, so the `.id(appTheme)`
+    /// tree rebuild after a theme change doesn't re-trigger auto-navigation
+    /// and teleport the user off the screen they were on.
+    private static var didAutoNavigate   = false
 
     @AppStorage("countdownEnabled") private var countdownEnabled: Bool = true
 
@@ -101,14 +105,14 @@ struct MainView: View {
             }
             .navigationBarHidden(true)
             .onAppear {
-                guard !didAutoNavigate, let newest = store.periods.first else { return }
-                didAutoNavigate = true
+                guard !Self.didAutoNavigate, let newest = store.periods.first else { return }
+                Self.didAutoNavigate = true
                 selectedPeriod = newest
             }
             .onChange(of: store.periods) { _, periods in
                 // Handles the case where the store finishes loading after onAppear fires
-                guard !didAutoNavigate, let newest = periods.first else { return }
-                didAutoNavigate = true
+                guard !Self.didAutoNavigate, let newest = periods.first else { return }
+                Self.didAutoNavigate = true
                 selectedPeriod = newest
             }
             // NOTE: autoconnect() manages the timer's connection. Do NOT manually

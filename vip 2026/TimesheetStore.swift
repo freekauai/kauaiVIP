@@ -149,8 +149,8 @@ class TimesheetStore: ObservableObject {
                 let row = [
                     csvQuote(period.label),
                     csvQuote(t.formattedDate),
-                    t.vehicle.rawValue,
-                    t.service.rawValue,
+                    csvQuote(t.vehicle.rawValue),   // custom names may contain commas
+                    csvQuote(t.service.rawValue),
                     csvQuote(t.clientName),
                     t.formattedPickup,
                     t.formattedDropoff,

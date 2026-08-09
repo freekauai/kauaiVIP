@@ -223,7 +223,8 @@ struct PeriodDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { trip in
-            Text("Remove \(trip.service.rawValue) trip for \(trip.clientName)? This cannot be undone.")
+            // No "cannot be undone" here — deleting shows an Undo toast.
+            Text("Remove \(trip.service.rawValue) trip for \(trip.clientName)?")
         }
         .alert("Delete Period?", isPresented: $showDeletePeriodAlert) {
             Button("Delete", role: .destructive) {

@@ -26,6 +26,7 @@ struct CSVImportView: View {
                     VStack(spacing: AppTheme.cardSpacing) {
                         fileCard
                         if !parsedTrips.isEmpty { datesCard }
+                        if !parsedTrips.isEmpty && hasOverlap { overlapCard }
                         if !parsedTrips.isEmpty { previewCard }
                         if let err = parseError { errorCard(err) }
                     }
@@ -126,6 +127,25 @@ struct CSVImportView: View {
                         .foregroundColor(AppTheme.textTertiary)
                         .padding(.top, 2)
                 }
+            }
+        }
+    }
+
+    /// Same warning NewPeriodView shows — non-blocking, the driver decides.
+    private var hasOverlap: Bool {
+        store.periods.contains { existing in
+            !(endDate < existing.startDate || startDate > existing.endDate)
+        }
+    }
+
+    private var overlapCard: some View {
+        AppCard {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(AppTheme.warning)
+                Text("This period overlaps with an existing period.")
+                    .font(.system(size: 13))
+                    .foregroundColor(AppTheme.warning)
             }
         }
     }
