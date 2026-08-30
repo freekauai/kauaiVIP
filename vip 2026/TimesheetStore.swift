@@ -18,11 +18,29 @@ class TimesheetStore: ObservableObject {
     @Published var customServices: [ServiceType] = []
     @Published var customPlaces:   [Place]       = []
 
+    /// Driver-chosen display order for ALL places (names). Drives the
+    /// Add-Place menu, trip-card tag order, and the Settings list. Kept in
+    /// sync by `syncPlaceOrder()` — new places append, deleted ones drop out.
+    @Published private var placeOrder: [String] = []
+
     /// Full pick lists used by the trip form and breakdowns:
     /// built-ins first, then the driver's custom additions.
     var allVehicles: [Vehicle]     { Vehicle.builtIns + customVehicles }
     var allServices: [ServiceType] { ServiceType.builtIns + customServices }
-    var allPlaces:   [Place]       { Place.builtIns + customPlaces }
+
+    /// Every place, in the driver's chosen order (built-ins are reorderable
+    /// too — only deletion is restricted to customs).
+    var allPlaces: [Place] {
+        let base = Place.builtIns + customPlaces
+        guard !placeOrder.isEmpty else { return base }
+        var byName = Dictionary(uniqueKeysWithValues: base.map { ($0.name, $0) })
+        var ordered: [Place] = []
+        for name in placeOrder {
+            if let p = byName.removeValue(forKey: name) { ordered.append(p) }
+        }
+        ordered.append(contentsOf: base.filter { byName[$0.name] != nil })
+        return ordered
+    }
 
     /// Label shown on screen and in PDF exports: the company name when set,
     /// otherwise the driver's name.
@@ -37,6 +55,7 @@ class TimesheetStore: ObservableObject {
     private let customVehiclesKey   = "kauai_vip_2026_custom_vehicles"
     private let customServicesKey   = "kauai_vip_2026_custom_services"
     private let customPlacesKey     = "kauai_vip_2026_custom_places"
+    private let placeOrderKey       = "kauai_vip_2026_place_order"
 
     // Documents-directory file URL — survives reinstall via iCloud/iTunes backup
     private var periodsFileURL: URL {
@@ -105,11 +124,51 @@ class TimesheetStore: ObservableObject {
         else { return }
         customPlaces.append(Place(name: name))
         UserDefaults.standard.set(customPlaces.map(\.name), forKey: customPlacesKey)
+        syncPlaceOrder()
     }
 
     func removeCustomPlace(_ place: Place) {
         customPlaces.removeAll { $0 == place }
         UserDefaults.standard.set(customPlaces.map(\.name), forKey: customPlacesKey)
+        syncPlaceOrder()
+    }
+
+    /// Renames a custom place (built-ins keep their names + aliases). Same
+    /// collision guard as adding; the saved order entry follows the rename.
+    /// Existing trip notes keep their original text — a renamed place simply
+    /// matches its new name from now on.
+    func renameCustomPlace(_ place: Place, to rawName: String) {
+        let name = rawName.trimmingCharacters(in: .whitespaces)
+        let key  = name.lowercased()
+        guard !name.isEmpty,
+              let idx = customPlaces.firstIndex(of: place),
+              !allPlaces.contains(where: { $0 != place && ($0.aliases.contains(key) || $0.name.lowercased() == key) })
+        else { return }
+        customPlaces[idx] = Place(name: name)
+        UserDefaults.standard.set(customPlaces.map(\.name), forKey: customPlacesKey)
+        if let oIdx = placeOrder.firstIndex(of: place.name) { placeOrder[oIdx] = name }
+        UserDefaults.standard.set(placeOrder, forKey: placeOrderKey)
+    }
+
+    /// Moves one place within the driver's display order: remove at `from`,
+    /// insert at `to` (both indices into the current `allPlaces`).
+    func movePlace(from: Int, to: Int) {
+        var order = allPlaces.map(\.name)
+        guard order.indices.contains(from), order.indices.contains(to), from != to else { return }
+        let name = order.remove(at: from)
+        order.insert(name, at: to)
+        placeOrder = order
+        UserDefaults.standard.set(order, forKey: placeOrderKey)
+    }
+
+    /// Reconciles the saved order with the current place set: known names
+    /// keep their position, deleted ones drop out, new ones append.
+    private func syncPlaceOrder() {
+        let names = (Place.builtIns + customPlaces).map(\.name)
+        var order = placeOrder.filter { names.contains($0) }
+        for n in names where !order.contains(n) { order.append(n) }
+        placeOrder = order
+        UserDefaults.standard.set(order, forKey: placeOrderKey)
     }
 
     // MARK: - Sorting (newest startDate first)
@@ -239,6 +298,8 @@ class TimesheetStore: ObservableObject {
             UserDefaults.standard.array(forKey: customPlacesKey) as? [String] ?? [],
             against: Place.builtIns.flatMap { [$0.name] + $0.aliases }
         ).map { Place(name: $0) }
+        placeOrder = UserDefaults.standard.array(forKey: placeOrderKey) as? [String] ?? []
+        syncPlaceOrder()
     }
 
     /// Drops blanks, built-in collisions, and case-insensitive duplicates from a

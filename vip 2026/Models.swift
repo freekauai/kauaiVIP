@@ -115,17 +115,17 @@ extension Place {
         }
     }
 
-    /// Ships with the app — mirrors the Kauai Route Map locations. Never
-    /// deletable; the driver adds custom places in Settings.
+    /// Ships with the app — four generic categories; the driver adds specific
+    /// spots (hotels, towns, clients) in Settings. Never deletable. Aliases
+    /// catch the words dispatch texts actually use ("Hyatt" → Hotel,
+    /// "LIH" → Airport, "VRBO" → House).
     static let builtIns: [Place] = [
-        Place(name: "Lihue Airport", aliases: ["lih", "airport", "lihue airport"], icon: "✈️"),
-        Place(name: "Grand Hyatt",   aliases: ["hyatt", "grand hyatt"],            icon: "🏨"),
-        Place(name: "Princeville",   aliases: ["princeville"],                     icon: "🏡"),
-        Place(name: "Hanalei",       aliases: ["hanalei"],                         icon: "🌉"),
-        Place(name: "Kapaa",         aliases: ["kapaa", "kapa'a"],                 icon: "🏘️"),
-        Place(name: "Poipu",         aliases: ["poipu", "po'ipu"],                 icon: "🏖️"),
-        Place(name: "Koloa",         aliases: ["koloa"],                           icon: "🌺"),
-        Place(name: "Waimea",        aliases: ["waimea"],                          icon: "🏔️"),
+        Place(name: "Airport",  aliases: ["airport", "lih", "lihue airport"],  icon: "✈️"),
+        Place(name: "Hotel",    aliases: ["hotel", "resort", "hyatt", "marriott",
+                                          "hilton", "sheraton", "westin"],     icon: "🏨"),
+        Place(name: "House",    aliases: ["house", "home", "residence",
+                                          "rental", "vrbo", "airbnb"],         icon: "🏠"),
+        Place(name: "Business", aliases: ["business", "office"],               icon: "🏢"),
     ]
 }
 

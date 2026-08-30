@@ -8,6 +8,7 @@
 // and applied at the WindowGroup level in KauaiVIP2026App.swift.
 
 import SwiftUI
+import UniformTypeIdentifiers   // UTType.text for place drag-reorder
 
 struct SettingsView: View {
     @EnvironmentObject var store: TimesheetStore
@@ -23,6 +24,12 @@ struct SettingsView: View {
     @State private var newVehicleInput:       String = ""
     @State private var newServiceInput:       String = ""
     @State private var newPlaceInput:         String = ""
+
+    // Place editing / reordering
+    @State private var draggingPlace:   Place? = nil
+    @State private var placeToRename:   Place? = nil
+    @State private var showRenamePlace: Bool   = false
+    @State private var renamePlaceInput: String = ""
     @State private var showClearConfirmation: Bool   = false
 
     private var appVersion: String {
@@ -203,16 +210,21 @@ struct SettingsView: View {
         AppCard {
             VStack(alignment: .leading, spacing: 12) {
                 Text("PLACES").labelStyle()
-                Text("Matched in trip notes — “pickup at Grand Hyatt to LIH” tags both places on the card and in Stats. Add your own hotels or stops.")
+                Text("Matched in trip notes — “Hyatt to LIH” tags Hotel and Airport on the card and in Stats. Add your own spots, drag to reorder the Add-Place menu, tap ✏️ to rename.")
                     .font(.system(size: AppTheme.footnote))
                     .foregroundColor(AppTheme.textTertiary)
 
                 VStack(spacing: 8) {
                     ForEach(store.allPlaces) { p in
-                        itemRow(icon: p.icon, name: p.name,
-                                isBuiltIn: Place.builtIns.contains(p)) {
-                            store.removeCustomPlace(p)
-                        }
+                        placeRow(p)
+                            .onDrag {
+                                draggingPlace = p
+                                return NSItemProvider(object: p.name as NSString)
+                            }
+                            .onDrop(of: [.text],
+                                    delegate: PlaceDropDelegate(item: p,
+                                                                dragging: $draggingPlace,
+                                                                store: store))
                     }
                 }
 
@@ -221,6 +233,94 @@ struct SettingsView: View {
                     newPlaceInput = ""
                 }
             }
+        }
+        .alert("Rename Place", isPresented: $showRenamePlace, presenting: placeToRename) { place in
+            TextField("Place name", text: $renamePlaceInput)
+                .autocorrectionDisabled()
+            Button("Save") { store.renameCustomPlace(place, to: renamePlaceInput) }
+            Button("Cancel", role: .cancel) {}
+        } message: { place in
+            Text("Rename “\(place.name)”. Existing trip notes keep their text — matching just follows the new name.")
+        }
+    }
+
+    /// A place row: drag handle + icon + name, then rename/delete for customs
+    /// or a "Built-in" tag. Every row (built-ins included) is draggable.
+    private func placeRow(_ p: Place) -> some View {
+        let isBuiltIn = Place.builtIns.contains(p)
+        return HStack(spacing: 10) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 13))
+                .foregroundColor(AppTheme.textTertiary)
+            Text(p.icon)
+                .font(.system(size: 18))
+                .frame(width: 26)
+            Text(p.name)
+                .font(.system(size: AppTheme.subhead, weight: .medium))
+                .foregroundColor(AppTheme.textPrimary)
+            Spacer()
+            if isBuiltIn {
+                Text("Built-in")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppTheme.textTertiary)
+            } else {
+                Button {
+                    placeToRename    = p
+                    renamePlaceInput = p.name
+                    showRenamePlace  = true
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 14))
+                        .foregroundColor(AppTheme.coral)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Rename \(p.name)")
+                Button { store.removeCustomPlace(p) } label: {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(AppTheme.error)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Delete \(p.name)")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(AppTheme.oceanLight.opacity(draggingPlace == p ? 0.5 : 0.25))
+        .cornerRadius(AppTheme.fieldRadius)
+    }
+
+    // MARK: - Place drag-reorder delegate
+    /// Live-reorders the list as the dragged row passes over others
+    /// (classic DropDelegate pattern for reordering inside a VStack).
+    private struct PlaceDropDelegate: DropDelegate {
+        let item: Place
+        @Binding var dragging: Place?
+        let store: TimesheetStore
+
+        func dropUpdated(info: DropInfo) -> DropProposal? {
+            DropProposal(operation: .move)
+        }
+
+        func dropEntered(info: DropInfo) {
+            // SwiftUI calls DropDelegate on the main thread.
+            MainActor.assumeIsolated {
+                guard let dragging = dragging, dragging != item,
+                      let from = store.allPlaces.firstIndex(of: dragging),
+                      let to   = store.allPlaces.firstIndex(of: item) else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    store.movePlace(from: from, to: to)
+                }
+            }
+        }
+
+        func performDrop(info: DropInfo) -> Bool {
+            dragging = nil
+            return true
         }
     }
 
@@ -265,6 +365,7 @@ struct SettingsView: View {
             TextField(placeholder, text: text)
                 .foregroundColor(AppTheme.textPrimary)
                 .font(.system(size: AppTheme.body))
+                .autocorrectionDisabled()   // proper nouns ("Poipu" → "Poppy")
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(AppTheme.oceanLight.opacity(0.4))
