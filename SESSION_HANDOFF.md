@@ -8,17 +8,18 @@ layout, the nested-repo trap, and the hard rules. This file is only the
 
 ## Where things stand
 
-**Version 1.5.3, build 3** — committed, tagged, pushed, working tree clean,
-archive built and waiting in Xcode's Organizer.
+**Version 1.5.4, build 3** — committed, tagged, pushed, working tree clean,
+**uploaded to App Store Connect as 1.5.4 (3)** (renamed from 1.5.3 in Xcode,
+archived from the GUI on 2026-08-30).
 
 | | |
 |---|---|
-| HEAD | `8a03200` "Version 1.5.3 (build 3)" |
-| Tag | `v1.5.3-build3` |
+| HEAD | `3849638` "Version 1.5.4 (build 3)" |
+| Tag | `v1.5.4-build3` |
 | Remote | in sync with `origin/main` (`git@github.com:freekauai/kauaiVIP.git`) |
-| Archive | `~/Library/Developer/Xcode/Archives/2026-08-09/RunSheet 1.5.3 (3).xcarchive` — verified stamped 1.5.3 (3), EngineStart.wav confirmed in bundle |
+| Archive | `~/Library/Developer/Xcode/Archives/2026-08-30/` (GUI archive, 1:10 PM) — uploaded; older CLI archives under 2026-08-09 are dead, delete from Organizer |
 
-**Status: archive is built; upload to App Store Connect not yet confirmed.**
+**Status: UPLOADED as 1.5.4 (3). Remaining: create the 1.5.4 version entry in App Store Connect, attach the build, paste the texts below, submit for review.**
 
 ## Why 1.5.3 and not 1.5.2 (2) — IMPORTANT
 
@@ -30,7 +31,7 @@ The 1.5.2 (2) upload was **rejected by App Store Connect** (errors 90062 +
 `RunSheet 1.5.2 (2).xcarchive` may still sit in Organizer — ignore/delete it.
 (This rule is now also noted in CLAUDE.md.)
 
-## What's in 1.5.3 (3)
+## What's in 1.5.4 (3)
 
 Everything from 1.5.2 build 2 (editable Paste Trips preview + clipboard-race
 fix, see commit `2f90325`) **plus** two polish rounds (`b766c9f`, `e6a93dd`, `a2c4d55`), the full Places suite (note detection → card tags → By Place stats → route builder → Settings editor with rename/drag-reorder and Airport/Hotel/House/Business defaults), and the staged splash animation with engine sound (`.ambient`, respects silent switch) — CSV/PDF fixes and a full simulator-verified UI polish pass (safe-area CTAs, compact Add Trip form, weather tile, autocorrect off on names, leaner home screen). Highlights of `b766c9f`:
@@ -72,11 +73,9 @@ Known non-issues, on record:
 
 ## Next steps
 
-1. Xcode → Window → Organizer → select **RunSheet 1.5.3 (3)** →
-   **Validate App** → **Distribute App → App Store Connect → Upload**.
-   (Destination must be Any iOS Device if re-archiving from the GUI.)
-2. In App Store Connect, create the **1.5.3** version entry.
-3. Paste the texts below.
+1. ~~Archive + upload~~ — done, build 1.5.4 (3) is in App Store Connect.
+2. In App Store Connect, create the **1.5.4** version entry, attach build 3.
+3. Paste the texts below, submit for review.
 
 ### "What's New" (release notes field, 4,000-char limit)
 
