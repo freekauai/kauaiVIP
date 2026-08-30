@@ -8,15 +8,15 @@ layout, the nested-repo trap, and the hard rules. This file is only the
 
 ## Where things stand
 
-**Version 1.5.3, build 1** — committed, tagged, pushed, working tree clean,
+**Version 1.5.3, build 2** — committed, tagged, pushed, working tree clean,
 archive built and waiting in Xcode's Organizer.
 
 | | |
 |---|---|
-| HEAD | `b239db1` "Version 1.5.3 (build 1)" |
-| Tag | `v1.5.3-build1` |
+| HEAD | `42a8996` "Version 1.5.3 (build 2)" |
+| Tag | `v1.5.3-build2` |
 | Remote | in sync with `origin/main` (`git@github.com:freekauai/kauaiVIP.git`) |
-| Archive | `~/Library/Developer/Xcode/Archives/2026-08-09/RunSheet 1.5.3 (1).xcarchive` — verified stamped 1.5.3 (1) |
+| Archive | `~/Library/Developer/Xcode/Archives/2026-08-09/RunSheet 1.5.3 (2).xcarchive` — verified stamped 1.5.3 (2) |
 
 **Status: archive is built; upload to App Store Connect not yet confirmed.**
 
@@ -26,14 +26,14 @@ The 1.5.2 (2) upload was **rejected by App Store Connect** (errors 90062 +
 90186): 1.5.2 was already approved at some point, and an approved version
 "train" is closed forever — a higher build number alone is never enough, the
 `MARKETING_VERSION` itself must go up. So the paste-import feature ships as
-**1.5.3 (1)** together with this session's fixes. The dead
+**1.5.3** together with this session's fixes. The dead
 `RunSheet 1.5.2 (2).xcarchive` may still sit in Organizer — ignore/delete it.
 (This rule is now also noted in CLAUDE.md.)
 
-## What's in 1.5.3 (1)
+## What's in 1.5.3 (2)
 
 Everything from 1.5.2 build 2 (editable Paste Trips preview + clipboard-race
-fix, see commit `2f90325`) **plus** commit `b766c9f`:
+fix, see commit `2f90325`) **plus** two polish rounds (`b766c9f`, `e6a93dd`, `a2c4d55`) — CSV/PDF fixes and a full simulator-verified UI polish pass (safe-area CTAs, compact Add Trip form, weather tile, autocorrect off on names, leaner home screen). Highlights of `b766c9f`:
 
 - CSV export: vehicle/service names quoted; newlines in notes flattened to
   `" / "` — custom names with commas and multi-line notes now survive
@@ -72,7 +72,7 @@ Known non-issues, on record:
 
 ## Next steps
 
-1. Xcode → Window → Organizer → select **RunSheet 1.5.3 (1)** →
+1. Xcode → Window → Organizer → select **RunSheet 1.5.3 (2)** →
    **Validate App** → **Distribute App → App Store Connect → Upload**.
    (Destination must be Any iOS Device if re-archiving from the GUI.)
 2. In App Store Connect, create the **1.5.3** version entry.
