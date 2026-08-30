@@ -202,16 +202,8 @@ struct MainView: View {
                     }
                     .font(.system(size: 12))
                     .foregroundColor(AppTheme.textSecondary)
-
-                    // Bridge status inline
-                    Label {
-                        Text("Hanalei Bridge: \(bridgeService.bridgeStatus)")
-                            .fontWeight(.semibold)
-                    } icon: {
-                        Image(systemName: bridgeService.level.sfSymbol)
-                    }
-                    .font(.system(size: 13))
-                    .foregroundColor(bridgeService.level.statusColor)
+                    // No bridge status here — the banner above is its home,
+                    // and repeating it dilutes the "something changed" signal.
                 }
                 Spacer()
                 Button("Details") { activeModal = .weather }

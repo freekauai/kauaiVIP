@@ -196,14 +196,10 @@ struct PeriodDetailView: View {
         .sheet(isPresented: $showAddTrip) {
             TripFormView(periodID: periodID, existingTrip: nil)
                 .environmentObject(store)            // sheets don't inherit env objects
-                .environmentObject(bridgeService)    // TripFormView embeds TrafficBanner
-                .environmentObject(weatherManager)
         }
         .sheet(item: $editingTrip) { trip in
             TripFormView(periodID: periodID, existingTrip: trip)
                 .environmentObject(store)
-                .environmentObject(bridgeService)
-                .environmentObject(weatherManager)
         }
         .alert("Delete Trip?", isPresented: $showDeleteAlert, presenting: tripToDelete) { trip in
             Button("Delete", role: .destructive) {

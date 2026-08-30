@@ -277,6 +277,17 @@ struct PasteImportView: View {
                     .padding(8)
                     .background(AppTheme.oceanLight.opacity(0.4))
                     .cornerRadius(AppTheme.fieldRadius)
+                    // Ghost sample teaches the expected format at a glance.
+                    .overlay(alignment: .topLeading) {
+                        if rawText.isEmpty {
+                            Text("8-31-26 Monday\nRun 1\n930 am pickup at Grand Hyatt\n11 pax\nName: Cellura")
+                                .font(.system(size: 13, design: .monospaced))
+                                .foregroundColor(AppTheme.textTertiary.opacity(0.55))
+                                .padding(.top, 16)
+                                .padding(.leading, 13)
+                                .allowsHitTesting(false)
+                        }
+                    }
 
                 HStack(spacing: 10) {
                     Button {

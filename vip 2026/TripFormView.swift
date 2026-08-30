@@ -19,7 +19,6 @@ struct TripFormView: View {
         }
         return min(period.startDate, period.endDate)...max(period.startDate, period.endDate)
     }
-    @EnvironmentObject var bridgeService: BridgeService
     @Environment(\.dismiss) var dismiss
 
     // Form state
@@ -102,20 +101,23 @@ struct TripFormView: View {
 
                 ScrollView {
                     VStack(spacing: 0) {
-                        // Traffic Banner
-                        TrafficBanner()
-
+                        // No TrafficBanner here — a data-entry sheet doesn't
+                        // need live traffic, and it pushed Times/Notes two
+                        // screens down.
                         VStack(spacing: AppTheme.cardSpacing) {
                             // ── Date ──────────────────────────────────
+                            // Compact pill (expands to a calendar on tap)
+                            // instead of the always-open graphical calendar.
                             AppCard {
-                                VStack(alignment: .leading, spacing: 8) {
+                                HStack {
                                     Text("TRIP DATE").labelStyle()
+                                    Spacer()
                                     DatePicker("Date", selection: $date,
                                                in: dateRange,
                                                displayedComponents: .date)
-                                        .datePickerStyle(.graphical)
+                                        .datePickerStyle(.compact)
                                         .labelsHidden()
-                                        .accentColor(AppTheme.coral)
+                                        .tint(AppTheme.coral)
                                 }
                             }
 
@@ -204,9 +206,10 @@ struct TripFormView: View {
             .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(AppTheme.oceanDeep, for: .navigationBar)
-            // Drag to dismiss the keyboard; without this it covers the Save
-            // button with no obvious way out on small screens.
-            .scrollDismissesKeyboard(.interactively)
+            // Scroll dismisses the keyboard; .immediately (not .interactively)
+            // so the keyboard toolbar's "Done" pill can't linger on screen
+            // half-detached after an interactive drag.
+            .scrollDismissesKeyboard(.immediately)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()

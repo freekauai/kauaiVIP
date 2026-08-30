@@ -168,6 +168,9 @@ extension View {
 // MARK: - CoralButton Style
 struct CoralButtonStyle: ButtonStyle {
     var fullWidth: Bool = true
+    /// Fill color — CoralButton passes gray when disabled so the button
+    /// reads as inert instead of a half-faded (still tappable-looking) accent.
+    var fillColor: Color = AppTheme.coral
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: AppTheme.body, weight: .bold))
@@ -175,7 +178,7 @@ struct CoralButtonStyle: ButtonStyle {
             .frame(maxWidth: fullWidth ? .infinity : nil)
             .padding(.vertical, 13)
             .padding(.horizontal, 20)
-            .background(AppTheme.coral.opacity(configuration.isPressed ? 0.8 : 1.0))
+            .background(fillColor.opacity(configuration.isPressed ? 0.8 : 1.0))
             .cornerRadius(AppTheme.buttonRadius)
     }
 }

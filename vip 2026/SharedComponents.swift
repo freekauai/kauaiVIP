@@ -43,7 +43,9 @@ struct TrafficBanner: View {
                     .minimumScaleFactor(0.8)
                     .layoutPriority(1)   // keep status readable; drop water level first
                 Spacer(minLength: 4)
-                if bridgeService.rawWaterFt != nil {
+                // Hide the reading when the river is essentially dry —
+                // "0.00 ft" next to "Open" reads like a glitch, not data.
+                if let ft = bridgeService.rawWaterFt, ft >= 0.05 {
                     Text(bridgeService.waterLevelFt)
                         .font(.system(size: 11))
                         .opacity(0.75)
@@ -388,9 +390,9 @@ struct CoralButton: View {
                 Text(title).fontWeight(.bold)
             }
         }
-        .buttonStyle(CoralButtonStyle())
+        // Gray fill when disabled — a half-faded accent still looks tappable.
+        .buttonStyle(CoralButtonStyle(fillColor: disabled ? AppTheme.textTertiary.opacity(0.55) : AppTheme.coral))
         .disabled(disabled)
-        .opacity(disabled ? 0.5 : 1.0)
     }
 }
 
@@ -724,8 +726,10 @@ struct AppFooter: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            CoralButton("🏄 Where's the Surf?") { showSurf = true }
-                .padding(.horizontal, AppTheme.screenPad)
+            // Ghost style on purpose — the footer must not compete with the
+            // screen's primary CTA sitting directly below it.
+            Button("🏄 Where's the Surf?") { showSurf = true }
+                .buttonStyle(GhostButtonStyle())
 
             Button { showSettings = true } label: {
                 Label("Settings", systemImage: "gearshape.fill")
