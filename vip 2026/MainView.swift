@@ -80,27 +80,26 @@ struct MainView: View {
                             miniRouteMapCard
                             periodListSection
                         }
-                        .padding(.bottom, 100) // FAB clearance
                     }
                     .refreshable {
                         weatherManager.refresh()
                         bridgeService.refresh()
                     }
-                }
-
-                // ── Floating Add Button ───────────────────────────────
-                VStack {
-                    Spacer()
-                    CoralButton("+ New Pay Period", action: { showNewPeriod = true })
-                        .padding(.horizontal, AppTheme.screenPad)
-                        .padding(.bottom, 28)
-                        .background(
-                            LinearGradient(
-                                colors: [AppTheme.oceanDeep.opacity(0), AppTheme.oceanDeep],
-                                startPoint: .top, endPoint: .bottom
+                    // Bottom CTA lives in the safe-area inset so scroll content
+                    // (empty states, footer links) can never rest underneath it.
+                    .safeAreaInset(edge: .bottom) {
+                        CoralButton("+ New Pay Period", action: { showNewPeriod = true })
+                            .padding(.horizontal, AppTheme.screenPad)
+                            .padding(.top, 6)
+                            .padding(.bottom, 10)
+                            .background(
+                                LinearGradient(
+                                    colors: [AppTheme.oceanDeep.opacity(0), AppTheme.oceanDeep],
+                                    startPoint: .top, endPoint: .bottom
+                                )
+                                .allowsHitTesting(false)   // fade is decor — don't eat taps
                             )
-                            .allowsHitTesting(false)   // fade is decor — don't eat taps
-                        )
+                    }
                 }
             }
             .navigationBarHidden(true)
@@ -362,7 +361,7 @@ struct PeriodCard: View {
                         .foregroundColor(AppTheme.textPrimary)
 
                     HStack(spacing: 16) {
-                        Label("\(period.trips.count) trips", systemImage: "car.fill")
+                        Label("\(period.trips.count) trip\(period.trips.count == 1 ? "" : "s")", systemImage: "car.fill")
                             .font(.system(size: 13))
                             .foregroundColor(AppTheme.textSecondary)
                         Label("\(period.dayCount) days", systemImage: "calendar")

@@ -301,6 +301,21 @@ class WeatherManager: ObservableObject {
         tomorrowSunriseTime = d.sunrise.dropFirst().first.flatMap { fmt.date(from: $0) }
     }
 
+    /// Compact condition for the narrow top-strip weather tile, where the
+    /// full description ("Mainly Clear") truncates to an ellipsis.
+    var shortConditionText: String {
+        switch conditionText {
+        case "Clear Sky", "Mainly Clear":       return "Clear"
+        case "Partly Cloudy":                   return "P. Cloudy"
+        case "Light Drizzle", "Heavy Drizzle":  return "Drizzle"
+        case "Light Rain", "Heavy Rain":        return "Rain"
+        case "Light Showers", "Heavy Showers":  return "Showers"
+        case "Thunderstorm", "Thunderstorm w/ Hail": return "T-storm"
+        case "Mixed Conditions":                return "Mixed"
+        default:                                return conditionText
+        }
+    }
+
     // MARK: - WMO weather-code helpers (Open-Meteo)
     private func wmoDescription(_ code: Int) -> String {
         switch code {

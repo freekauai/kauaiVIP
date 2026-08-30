@@ -367,15 +367,6 @@ struct PasteImportView: View {
                                     .buttonStyle(.plain)
                                 }
                                 Spacer(minLength: 0)
-                                Menu {
-                                    ForEach(store.allServices) { svc in
-                                        Button(svc.rawValue) { trip.service = svc }
-                                    }
-                                } label: {
-                                    Text("\(trip.service.icon) \(trip.service.rawValue) ⌄")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundColor(AppTheme.info)
-                                }
                             }
 
                             // ── Client name — editable ──
@@ -383,16 +374,30 @@ struct PasteImportView: View {
                                 .font(.system(size: 17, weight: .bold))
                                 .foregroundColor(AppTheme.textPrimary)
                                 .textInputAutocapitalization(.words)
+                                .autocorrectionDisabled()   // proper nouns — don't "fix" them
 
-                            // ── Vehicle — tappable to correct ──
-                            Menu {
-                                ForEach(store.allVehicles) { v in
-                                    Button("\(v.icon) \(v.rawValue)") { trip.vehicle = v }
+                            // ── Vehicle & service — tappable to correct ──
+                            // Side by side on their own row so neither label
+                            // gets squeezed into "Airp…" by the date/time pills.
+                            HStack(spacing: 16) {
+                                Menu {
+                                    ForEach(store.allVehicles) { v in
+                                        Button("\(v.icon) \(v.rawValue)") { trip.vehicle = v }
+                                    }
+                                } label: {
+                                    Text("\(trip.vehicle.icon) \(trip.vehicle.rawValue) ⌄")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(AppTheme.textSecondary)
                                 }
-                            } label: {
-                                Text("\(trip.vehicle.icon) \(trip.vehicle.rawValue) ⌄")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(AppTheme.textSecondary)
+                                Menu {
+                                    ForEach(store.allServices) { svc in
+                                        Button("\(svc.icon) \(svc.rawValue)") { trip.service = svc }
+                                    }
+                                } label: {
+                                    Text("\(trip.service.icon) \(trip.service.rawValue) ⌄")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(AppTheme.info)
+                                }
                             }
 
                             if trip.isDuplicate {

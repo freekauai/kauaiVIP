@@ -133,6 +133,7 @@ struct TripFormView: View {
                             // ── Client ─────────────────────────────────
                             AppCard {
                                 AppTextField(label: "👤 Client Name", placeholder: "Enter client name…", text: $clientName)
+                                    .autocorrectionDisabled()   // proper nouns — don't "fix" them
                             }
 
                             // ── Times ──────────────────────────────────

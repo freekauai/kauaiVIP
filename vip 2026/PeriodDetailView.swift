@@ -65,27 +65,26 @@ struct PeriodDetailView: View {
                             tripsSection(period: period)
                             AppFooter()
                         }
-                        .padding(.bottom, 100)
                     }
                     .refreshable {
                         weatherManager.refresh()
                         bridgeService.refresh()
                     }
-                }
-
-                // Floating Add Trip
-                VStack {
-                    Spacer()
-                    CoralButton("+ Add Trip", action: { showAddTrip = true })
-                        .padding(.horizontal, AppTheme.screenPad)
-                        .padding(.bottom, 28)
-                        .background(
-                            LinearGradient(
-                                colors: [AppTheme.oceanDeep.opacity(0), AppTheme.oceanDeep],
-                                startPoint: .top, endPoint: .bottom
+                    // Bottom CTA lives in the safe-area inset so scroll content
+                    // (trip cards, footer links) can never rest underneath it.
+                    .safeAreaInset(edge: .bottom) {
+                        CoralButton("+ Add Trip", action: { showAddTrip = true })
+                            .padding(.horizontal, AppTheme.screenPad)
+                            .padding(.top, 6)
+                            .padding(.bottom, 10)
+                            .background(
+                                LinearGradient(
+                                    colors: [AppTheme.oceanDeep.opacity(0), AppTheme.oceanDeep],
+                                    startPoint: .top, endPoint: .bottom
+                                )
+                                .allowsHitTesting(false)   // fade is decor — don't eat taps
                             )
-                            .allowsHitTesting(false)   // fade is decor — don't eat taps
-                        )
+                    }
                 }
             } else {
                 Text("Period not found").foregroundColor(AppTheme.textTertiary)
