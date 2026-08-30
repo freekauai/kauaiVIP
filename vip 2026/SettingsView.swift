@@ -237,18 +237,19 @@ struct SettingsView: View {
         .alert("Rename Place", isPresented: $showRenamePlace, presenting: placeToRename) { place in
             TextField("Place name", text: $renamePlaceInput)
                 .autocorrectionDisabled()
-            Button("Save") { store.renameCustomPlace(place, to: renamePlaceInput) }
+            Button("Save") { store.renamePlace(place, to: renamePlaceInput) }
             Button("Cancel", role: .cancel) {}
         } message: { place in
-            Text("Rename “\(place.name)”. Existing trip notes keep their text — matching just follows the new name.")
+            Text(place.isBuiltIn
+                 ? "Rename “\(place.name)”. Its matching keywords (like Hyatt or LIH) stay attached."
+                 : "Rename “\(place.name)”. Existing trip notes keep their text — matching just follows the new name.")
         }
     }
 
-    /// A place row: drag handle + icon + name, then rename/delete for customs
-    /// or a "Built-in" tag. Every row (built-ins included) is draggable.
+    /// A place row: drag handle + icon + name. Every row is draggable and
+    /// renamable; only customs get a trash button — built-ins show a tag.
     private func placeRow(_ p: Place) -> some View {
-        let isBuiltIn = Place.builtIns.contains(p)
-        return HStack(spacing: 10) {
+        HStack(spacing: 10) {
             Image(systemName: "line.3.horizontal")
                 .font(.system(size: 13))
                 .foregroundColor(AppTheme.textTertiary)
@@ -259,24 +260,24 @@ struct SettingsView: View {
                 .font(.system(size: AppTheme.subhead, weight: .medium))
                 .foregroundColor(AppTheme.textPrimary)
             Spacer()
-            if isBuiltIn {
+            Button {
+                placeToRename    = p
+                renamePlaceInput = p.name
+                showRenamePlace  = true
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 14))
+                    .foregroundColor(AppTheme.coral)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Rename \(p.name)")
+            if p.isBuiltIn {
                 Text("Built-in")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(AppTheme.textTertiary)
             } else {
-                Button {
-                    placeToRename    = p
-                    renamePlaceInput = p.name
-                    showRenamePlace  = true
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 14))
-                        .foregroundColor(AppTheme.coral)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Rename \(p.name)")
                 Button { store.removeCustomPlace(p) } label: {
                     Image(systemName: "trash.fill")
                         .font(.system(size: 14))

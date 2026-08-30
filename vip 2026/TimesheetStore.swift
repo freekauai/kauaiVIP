@@ -23,15 +23,32 @@ class TimesheetStore: ObservableObject {
     /// sync by `syncPlaceOrder()` — new places append, deleted ones drop out.
     @Published private var placeOrder: [String] = []
 
+    /// Driver renames of built-in places, keyed by `Place.builtInKey`
+    /// ("Hotel" → "Resort"). The built-in keeps its icon and alias set —
+    /// only the display name changes; the new name joins the aliases.
+    @Published private var builtInRenames: [String: String] = [:]
+
     /// Full pick lists used by the trip form and breakdowns:
     /// built-ins first, then the driver's custom additions.
     var allVehicles: [Vehicle]     { Vehicle.builtIns + customVehicles }
     var allServices: [ServiceType] { ServiceType.builtIns + customServices }
 
+    /// Applies any driver rename to a built-in place.
+    private func applyRename(_ p: Place) -> Place {
+        guard let key = p.builtInKey,
+              let newName = builtInRenames[key],
+              !newName.isEmpty, newName != p.name else { return p }
+        let lower = newName.lowercased()
+        return Place(name: newName,
+                     aliases: p.aliases.contains(lower) ? p.aliases : p.aliases + [lower],
+                     icon: p.icon,
+                     builtInKey: key)
+    }
+
     /// Every place, in the driver's chosen order (built-ins are reorderable
-    /// too — only deletion is restricted to customs).
+    /// and renamable too — only deletion is restricted to customs).
     var allPlaces: [Place] {
-        let base = Place.builtIns + customPlaces
+        let base = Place.builtIns.map { applyRename($0) } + customPlaces
         guard !placeOrder.isEmpty else { return base }
         var byName = Dictionary(uniqueKeysWithValues: base.map { ($0.name, $0) })
         var ordered: [Place] = []
@@ -56,6 +73,7 @@ class TimesheetStore: ObservableObject {
     private let customServicesKey   = "kauai_vip_2026_custom_services"
     private let customPlacesKey     = "kauai_vip_2026_custom_places"
     private let placeOrderKey       = "kauai_vip_2026_place_order"
+    private let builtInRenamesKey   = "kauai_vip_2026_builtin_renames"
 
     // Documents-directory file URL — survives reinstall via iCloud/iTunes backup
     private var periodsFileURL: URL {
@@ -133,19 +151,25 @@ class TimesheetStore: ObservableObject {
         syncPlaceOrder()
     }
 
-    /// Renames a custom place (built-ins keep their names + aliases). Same
-    /// collision guard as adding; the saved order entry follows the rename.
-    /// Existing trip notes keep their original text — a renamed place simply
-    /// matches its new name from now on.
-    func renameCustomPlace(_ place: Place, to rawName: String) {
+    /// Renames any place — customs swap their name; built-ins keep their
+    /// icon + alias set (the new name joins the aliases) via a persisted
+    /// rename map. Same collision guard as adding; the saved order entry
+    /// follows the rename. Existing trip notes keep their original text.
+    func renamePlace(_ place: Place, to rawName: String) {
         let name = rawName.trimmingCharacters(in: .whitespaces)
         let key  = name.lowercased()
-        guard !name.isEmpty,
-              let idx = customPlaces.firstIndex(of: place),
+        guard !name.isEmpty, name != place.name,
               !allPlaces.contains(where: { $0 != place && ($0.aliases.contains(key) || $0.name.lowercased() == key) })
         else { return }
-        customPlaces[idx] = Place(name: name)
-        UserDefaults.standard.set(customPlaces.map(\.name), forKey: customPlacesKey)
+        if let builtInKey = place.builtInKey {
+            builtInRenames[builtInKey] = name
+            UserDefaults.standard.set(builtInRenames, forKey: builtInRenamesKey)
+        } else if let idx = customPlaces.firstIndex(of: place) {
+            customPlaces[idx] = Place(name: name)
+            UserDefaults.standard.set(customPlaces.map(\.name), forKey: customPlacesKey)
+        } else {
+            return
+        }
         if let oIdx = placeOrder.firstIndex(of: place.name) { placeOrder[oIdx] = name }
         UserDefaults.standard.set(placeOrder, forKey: placeOrderKey)
     }
@@ -164,7 +188,7 @@ class TimesheetStore: ObservableObject {
     /// Reconciles the saved order with the current place set: known names
     /// keep their position, deleted ones drop out, new ones append.
     private func syncPlaceOrder() {
-        let names = (Place.builtIns + customPlaces).map(\.name)
+        let names = (Place.builtIns.map { applyRename($0) } + customPlaces).map(\.name)
         var order = placeOrder.filter { names.contains($0) }
         for n in names where !order.contains(n) { order.append(n) }
         placeOrder = order
@@ -298,6 +322,8 @@ class TimesheetStore: ObservableObject {
             UserDefaults.standard.array(forKey: customPlacesKey) as? [String] ?? [],
             against: Place.builtIns.flatMap { [$0.name] + $0.aliases }
         ).map { Place(name: $0) }
+        builtInRenames = (UserDefaults.standard.dictionary(forKey: builtInRenamesKey) as? [String: String] ?? [:])
+            .filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
         placeOrder = UserDefaults.standard.array(forKey: placeOrderKey) as? [String] ?? []
         syncPlaceOrder()
     }

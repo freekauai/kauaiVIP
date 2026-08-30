@@ -90,13 +90,19 @@ struct Place: Hashable, Identifiable {
     let name:    String
     let aliases: [String]        // lowercase; always includes the name
     var icon:    String = "📍"
+    /// Original built-in identity ("Hotel", "Airport", …); nil for
+    /// driver-added places. Survives renames, so a renamed built-in keeps
+    /// its icon, alias set, and non-deletable status.
+    var builtInKey: String? = nil
 
     var id: String { name }
+    var isBuiltIn: Bool { builtInKey != nil }
 
-    init(name: String, aliases: [String] = [], icon: String = "📍") {
-        self.name    = name
-        self.aliases = aliases.isEmpty ? [name.lowercased()] : aliases
-        self.icon    = icon
+    init(name: String, aliases: [String] = [], icon: String = "📍", builtInKey: String? = nil) {
+        self.name       = name
+        self.aliases    = aliases.isEmpty ? [name.lowercased()] : aliases
+        self.icon       = icon
+        self.builtInKey = builtInKey
     }
 }
 
@@ -120,12 +126,12 @@ extension Place {
     /// catch the words dispatch texts actually use ("Hyatt" → Hotel,
     /// "LIH" → Airport, "VRBO" → House).
     static let builtIns: [Place] = [
-        Place(name: "Airport",  aliases: ["airport", "lih", "lihue airport"],  icon: "✈️"),
+        Place(name: "Airport",  aliases: ["airport", "lih", "lihue airport"],  icon: "✈️", builtInKey: "Airport"),
         Place(name: "Hotel",    aliases: ["hotel", "resort", "hyatt", "marriott",
-                                          "hilton", "sheraton", "westin"],     icon: "🏨"),
+                                          "hilton", "sheraton", "westin"],     icon: "🏨", builtInKey: "Hotel"),
         Place(name: "House",    aliases: ["house", "home", "residence",
-                                          "rental", "vrbo", "airbnb"],         icon: "🏠"),
-        Place(name: "Business", aliases: ["business", "office"],               icon: "🏢"),
+                                          "rental", "vrbo", "airbnb"],         icon: "🏠", builtInKey: "House"),
+        Place(name: "Business", aliases: ["business", "office"],               icon: "🏢", builtInKey: "Business"),
     ]
 }
 
