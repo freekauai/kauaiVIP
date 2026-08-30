@@ -192,6 +192,41 @@ struct TripFormView: View {
                                         .scrollContentBackground(.hidden)
                                         .background(AppTheme.oceanLight.opacity(0.3))
                                         .cornerRadius(AppTheme.fieldRadius)
+
+                                    // ── Route builder ──────────────────
+                                    // Each pick appends to the notes: the
+                                    // first inserts the place, every next
+                                    // one adds " to <place>" — so tapping
+                                    // builds "Hyatt to LIH to Poipu".
+                                    Menu {
+                                        ForEach(store.allPlaces) { p in
+                                            Button("\(p.icon) \(p.name)") { appendPlace(p) }
+                                        }
+                                    } label: {
+                                        Label(notesIsEmpty ? "Add place" : "to — add next place",
+                                              systemImage: "mappin.and.ellipse")
+                                            .font(.system(size: 13, weight: .semibold))
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(AppTheme.coral)
+
+                                    // Live preview of the places this trip
+                                    // will be tagged with (card + Stats).
+                                    let matched = Place.matches(in: notes, from: store.allPlaces)
+                                    if !matched.isEmpty {
+                                        HStack(spacing: 6) {
+                                            ForEach(matched) { place in
+                                                Text("\(place.icon) \(place.name)")
+                                                    .font(.system(size: 10, weight: .semibold))
+                                                    .foregroundColor(AppTheme.info)
+                                                    .lineLimit(1)
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 3)
+                                                    .background(AppTheme.info.opacity(0.12))
+                                                    .cornerRadius(5)
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -244,6 +279,22 @@ struct TripFormView: View {
                     date = min(max(date, dateRange.lowerBound), dateRange.upperBound)
                 }
             }
+        }
+    }
+
+    // MARK: - Route builder
+    private var notesIsEmpty: Bool {
+        notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// First pick inserts the place name; every later pick appends
+    /// " to <place>", building a route like "Grand Hyatt to Lihue Airport".
+    private func appendPlace(_ place: Place) {
+        if notesIsEmpty {
+            notes = place.name
+        } else {
+            notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                + " to " + place.name
         }
     }
 

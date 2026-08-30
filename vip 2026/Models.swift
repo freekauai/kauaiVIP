@@ -101,6 +101,20 @@ struct Place: Hashable, Identifiable {
 }
 
 extension Place {
+    /// Known places mentioned in `text` (word-boundary, case-insensitive),
+    /// in `allPlaces` order. Shared by trip cards, Stats, and the trip
+    /// form's live route preview.
+    static func matches(in text: String, from allPlaces: [Place]) -> [Place] {
+        guard !text.isEmpty else { return [] }
+        let lower = text.lowercased()
+        return allPlaces.filter { place in
+            place.aliases.contains { alias in
+                lower.range(of: "\\b\(NSRegularExpression.escapedPattern(for: alias))\\b",
+                            options: .regularExpression) != nil
+            }
+        }
+    }
+
     /// Ships with the app — mirrors the Kauai Route Map locations. Never
     /// deletable; the driver adds custom places in Settings.
     static let builtIns: [Place] = [
@@ -242,14 +256,7 @@ struct Trip: Identifiable, Codable {
     /// Known places mentioned in this trip's notes, in `allPlaces` order.
     /// Word-boundary, case-insensitive — see `Place` for the alias rules.
     func places(from allPlaces: [Place]) -> [Place] {
-        guard !notes.isEmpty else { return [] }
-        let text = notes.lowercased()
-        return allPlaces.filter { place in
-            place.aliases.contains { alias in
-                text.range(of: "\\b\(NSRegularExpression.escapedPattern(for: alias))\\b",
-                           options: .regularExpression) != nil
-            }
-        }
+        Place.matches(in: notes, from: allPlaces)
     }
 
     var formattedDate: String {
