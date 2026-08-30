@@ -4,6 +4,7 @@
 // ╚══════════════════════════════════════════════════════════════╝
 
 import SwiftUI
+import AVFoundation   // splash engine sound
 
 struct ContentView: View {
     @State private var activeModal: AppModal? = nil
@@ -167,56 +168,139 @@ private struct LockScreenView: View {
 }
 
 // MARK: - Splash Screen
-/// Branded launch splash shown each time the app opens, then fades into the app.
+/// Branded launch splash: the SUV drives in from off-screen left (engine
+/// sound, leaning into the acceleration), settles into an idle bob while the
+/// wordmark and tagline stagger in, then drives off to the right as the app
+/// is revealed. Calls `onFinished` when the app should be shown (~3s).
 struct SplashView: View {
-    @State private var driveIn = false
+    var onFinished: () -> Void = {}
+
+    @State private var driveIn  = false   // off-screen left → centered
+    @State private var showWordmark = false
+    @State private var showTagline  = false
+    @State private var showCredit   = false
+    @State private var idling   = false   // gentle engine-idle bob
+    @State private var backUp   = false   // reverses out of the "spot" first
+    @State private var driveOut = false   // …then pulls away off-screen right
+    @State private var player: AVAudioPlayer? = nil
 
     var body: some View {
-        ZStack {
-            Color.white.ignoresSafeArea()   // the SUV artwork sits on white
+        GeometryReader { geo in
+            ZStack {
+                Color.white.ignoresSafeArea()   // the SUV artwork sits on white
 
-            VStack(spacing: 0) {
-                Spacer()
+                VStack(spacing: 0) {
+                    Spacer()
 
-                // SUV drives in from the left and settles
-                Image("RunSheetVehicle")
-                    .resizable()
-                    .scaledToFit()
-                    .padding(.horizontal, 24)
-                    .offset(x: driveIn ? 0 : -120)
-                    .opacity(driveIn ? 1 : 0)
-                    .accessibilityLabel("RunSheet")
+                    // SUV: drive-in / idle bob / drive-out are separate layers
+                    // so the repeating bob can't fight the one-shot moves.
+                    Image("RunSheetVehicle")
+                        .resizable()
+                        .scaledToFit()
+                        .padding(.horizontal, 24)
+                        .offset(y: idling ? -1.5 : 1.5)
+                        .animation(idling
+                                   ? .easeInOut(duration: 0.22).repeatForever(autoreverses: true)
+                                   : .default,
+                                   value: idling)
+                        .rotationEffect(.degrees(driveOut ? 2.5
+                                                 : backUp ? -1.5
+                                                 : (driveIn ? 0 : -3)))
+                        .offset(x: driveOut ? geo.size.width
+                                            : backUp ? -44
+                                            : (driveIn ? 0 : -geo.size.width))
+                        .accessibilityLabel("RunSheet")
 
-                // Wordmark + tagline (matches the in-app rounded-black style)
-                VStack(spacing: 6) {
-                    Text("RunSheet")
-                        .font(.system(size: 36, weight: .black, design: .rounded))
-                        .foregroundColor(Color(hex: "0F2547"))
-                    Text("Driver Timesheet System")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(Color(hex: "7488A3"))
-                        .tracking(1.5)
+                    // Wordmark + tagline (matches the in-app rounded-black style)
+                    VStack(spacing: 6) {
+                        Text("RunSheet")
+                            .font(.system(size: 36, weight: .black, design: .rounded))
+                            .foregroundColor(Color(hex: "0F2547"))
+                            .opacity(showWordmark ? 1 : 0)
+                            .offset(y: showWordmark ? 0 : 14)
+                        Text("Driver Timesheet System")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Color(hex: "7488A3"))
+                            .tracking(1.5)
+                            .opacity(showTagline ? 1 : 0)
+                            .offset(y: showTagline ? 0 : 10)
+                    }
+                    .padding(.top, 22)
+                    .opacity(driveOut ? 0 : 1)
+
+                    Spacer()
                 }
-                .padding(.top, 22)
-                .opacity(driveIn ? 1 : 0)
 
-                Spacer()
-            }
-
-            // Copyright pinned at the bottom edge
-            VStack {
-                Spacer()
-                Text("© 2026 Joey Wray")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Color(hex: "7488A3"))
-                    .padding(.bottom, 8)
+                // Copyright pinned at the bottom edge
+                VStack {
+                    Spacer()
+                    Text("© 2026 Joey Wray")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color(hex: "7488A3"))
+                        .padding(.bottom, 8)
+                        .opacity(showCredit && !driveOut ? 1 : 0)
+                }
             }
         }
-        .onAppear {
-            withAnimation(.spring(response: 0.65, dampingFraction: 0.82).delay(0.1)) {
-                driveIn = true
-            }
+        .task { await runTimeline() }
+    }
+
+    // MARK: Timeline
+    @MainActor
+    private func runTimeline() async {
+        // Reduce Motion: skip the theatrics — show everything, brief hold, done.
+        if UIAccessibility.isReduceMotionEnabled {
+            driveIn = true; showWordmark = true; showTagline = true; showCredit = true
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            onFinished()
+            return
         }
+
+        playEngineSound()
+
+        // Drive in: heavier spring so the SUV overshoots a touch and settles.
+        withAnimation(.spring(response: 0.85, dampingFraction: 0.72).delay(0.05)) {
+            driveIn = true
+        }
+
+        try? await Task.sleep(nanoseconds: 550_000_000)
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { showWordmark = true }
+
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { showTagline = true }
+        withAnimation(.easeIn(duration: 0.4).delay(0.2)) { showCredit = true }
+
+        // Engine idles while the wordmark is read.
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        idling = true
+
+        // Hold, then back out of the spot… and pull away forward.
+        try? await Task.sleep(nanoseconds: 1_250_000_000)
+        idling = false
+        withAnimation(.easeInOut(duration: 0.35)) { backUp = true }
+
+        try? await Task.sleep(nanoseconds: 430_000_000)
+        withAnimation(.easeIn(duration: 0.5)) { driveOut = true }
+
+        try? await Task.sleep(nanoseconds: 450_000_000)
+        onFinished()
+    }
+
+    // MARK: Engine sound
+    /// `.ambient` = respects the silent switch and mixes with (never
+    /// interrupts) whatever the driver is already playing.
+    private func playEngineSound() {
+        guard let url = Bundle.main.url(forResource: "EngineStart", withExtension: "wav") else {
+            #if DEBUG
+            print("🔇 EngineStart.wav missing from bundle")
+            #endif
+            return
+        }
+        try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
+        try? AVAudioSession.sharedInstance().setActive(true)
+        player = try? AVAudioPlayer(contentsOf: url)
+        player?.volume = 0.65
+        player?.play()
     }
 }
 
@@ -228,14 +312,12 @@ struct RootView: View {
         ZStack {
             ContentView()
             if showSplash {
-                SplashView()
-                    .transition(.opacity)
-                    .zIndex(1)
+                SplashView {
+                    withAnimation(.easeInOut(duration: 0.4)) { showSplash = false }
+                }
+                .transition(.opacity)
+                .zIndex(1)
             }
-        }
-        .task {
-            try? await Task.sleep(nanoseconds: 1_800_000_000)   // ~1.8s
-            withAnimation(.easeInOut(duration: 0.5)) { showSplash = false }
         }
     }
 }
