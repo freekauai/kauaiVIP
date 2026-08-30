@@ -8,15 +8,15 @@ layout, the nested-repo trap, and the hard rules. This file is only the
 
 ## Where things stand
 
-**Version 1.5.3, build 2** — committed, tagged, pushed, working tree clean,
+**Version 1.5.3, build 3** — committed, tagged, pushed, working tree clean,
 archive built and waiting in Xcode's Organizer.
 
 | | |
 |---|---|
-| HEAD | `42a8996` "Version 1.5.3 (build 2)" |
-| Tag | `v1.5.3-build2` |
+| HEAD | `8a03200` "Version 1.5.3 (build 3)" |
+| Tag | `v1.5.3-build3` |
 | Remote | in sync with `origin/main` (`git@github.com:freekauai/kauaiVIP.git`) |
-| Archive | `~/Library/Developer/Xcode/Archives/2026-08-09/RunSheet 1.5.3 (2).xcarchive` — verified stamped 1.5.3 (2) |
+| Archive | `~/Library/Developer/Xcode/Archives/2026-08-09/RunSheet 1.5.3 (3).xcarchive` — verified stamped 1.5.3 (3), EngineStart.wav confirmed in bundle |
 
 **Status: archive is built; upload to App Store Connect not yet confirmed.**
 
@@ -30,10 +30,10 @@ The 1.5.2 (2) upload was **rejected by App Store Connect** (errors 90062 +
 `RunSheet 1.5.2 (2).xcarchive` may still sit in Organizer — ignore/delete it.
 (This rule is now also noted in CLAUDE.md.)
 
-## What's in 1.5.3 (2)
+## What's in 1.5.3 (3)
 
 Everything from 1.5.2 build 2 (editable Paste Trips preview + clipboard-race
-fix, see commit `2f90325`) **plus** two polish rounds (`b766c9f`, `e6a93dd`, `a2c4d55`) — CSV/PDF fixes and a full simulator-verified UI polish pass (safe-area CTAs, compact Add Trip form, weather tile, autocorrect off on names, leaner home screen). Highlights of `b766c9f`:
+fix, see commit `2f90325`) **plus** two polish rounds (`b766c9f`, `e6a93dd`, `a2c4d55`), the full Places suite (note detection → card tags → By Place stats → route builder → Settings editor with rename/drag-reorder and Airport/Hotel/House/Business defaults), and the staged splash animation with engine sound (`.ambient`, respects silent switch) — CSV/PDF fixes and a full simulator-verified UI polish pass (safe-area CTAs, compact Add Trip form, weather tile, autocorrect off on names, leaner home screen). Highlights of `b766c9f`:
 
 - CSV export: vehicle/service names quoted; newlines in notes flattened to
   `" / "` — custom names with commas and multi-line notes now survive
@@ -72,7 +72,7 @@ Known non-issues, on record:
 
 ## Next steps
 
-1. Xcode → Window → Organizer → select **RunSheet 1.5.3 (2)** →
+1. Xcode → Window → Organizer → select **RunSheet 1.5.3 (3)** →
    **Validate App** → **Distribute App → App Store Connect → Upload**.
    (Destination must be Any iOS Device if re-archiving from the GUI.)
 2. In App Store Connect, create the **1.5.3** version entry.
@@ -81,13 +81,13 @@ Known non-issues, on record:
 ### "What's New" (release notes field, 4,000-char limit)
 
 ```
-Paste Trips just got smarter.
+Paste Trips just got smarter - and RunSheet now knows your places.
 
-- Edit before you add: every run parsed from a dispatch text can now be corrected right in the preview - date, pickup time, client name, service, vehicle, and notes.
-- No more accidental toggles: including or excluding a run now lives on the checkmark only, so tapping a text field can't switch a run off.
-- Missing a time? Runs that arrive without one get a "+ Time" button that starts you at 9:00 AM.
-- First-tap paste fixed: "Paste from Clipboard" now works reliably on the very first tap after iOS asks for paste permission.
-- Plus small fixes: cleaner CSV exports, better PDF layouts with long vehicle names, and polish throughout.
+- Paste dispatch texts and correct every run right in the preview: date, pickup time, client name, service, vehicle, and notes.
+- New: Places. RunSheet spots Airport, Hotel, House, Business (and places you add) in trip notes, tags them on trip cards, and breaks them down in Stats.
+- New: route builder. Tap places to build "Hotel to Airport" routes in your notes without typing.
+- Make Places yours: add, rename, and drag to reorder them in Settings.
+- Fresh look: a new animated splash (with a little engine rumble), cleaner CSV exports, better PDF layouts, and polish throughout.
 
 Made on Kauai with Aloha.
 ```
