@@ -192,6 +192,18 @@ struct TripFormView: View {
                                         .scrollContentBackground(.hidden)
                                         .background(AppTheme.oceanLight.opacity(0.3))
                                         .cornerRadius(AppTheme.fieldRadius)
+                                        // Ghost hint — the empty box didn't read
+                                        // as typeable next to the place button.
+                                        .overlay(alignment: .topLeading) {
+                                            if notes.isEmpty {
+                                                Text("Type anything — pax, phone, details — or build a route below…")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(AppTheme.textTertiary.opacity(0.6))
+                                                    .padding(.top, 8)
+                                                    .padding(.leading, 5)
+                                                    .allowsHitTesting(false)
+                                            }
+                                        }
 
                                     // ── Route builder ──────────────────
                                     // Each pick appends to the notes: the
