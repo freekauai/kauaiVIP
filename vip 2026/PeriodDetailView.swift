@@ -363,6 +363,7 @@ struct PeriodDetailView: View {
                         isNextUp:         trip.id == nextUp,
                         countdownEnabled: countdownEnabled,
                         now:              now,
+                        places:           trip.places(from: store.allPlaces),
                         onEdit:           { editingTrip = trip },
                         onDelete:         { tripToDelete = trip; showDeleteAlert = true },
                         onToggleActive:   {
@@ -437,6 +438,7 @@ struct TripCard: View {
     var isNextUp:         Bool      = false
     var countdownEnabled: Bool      = false
     var now:              Date      = Date()
+    var places:           [Place]   = []      // known places found in notes
     let onEdit:           () -> Void
     let onDelete:         () -> Void
     let onToggleActive:   () -> Void
@@ -539,6 +541,21 @@ struct TripCard: View {
                                 HStack(spacing: 8) {
                                     ForEach(Array(chips.dropFirst(2)), id: \.0) { TimeChip(label: $0.0, value: $0.1) }
                                 }
+                            }
+                        }
+                    }
+                    // Place tags — known places detected in the notes
+                    if !places.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(places) { place in
+                                Text("\(place.icon) \(place.name)")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(AppTheme.info)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(AppTheme.info.opacity(0.12))
+                                    .cornerRadius(5)
                             }
                         }
                     }

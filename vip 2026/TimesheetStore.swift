@@ -13,14 +13,16 @@ class TimesheetStore: ObservableObject {
     @Published var companyName:   String      = ""
     @Published var lastSaveError: String?     = nil
 
-    /// User-added vehicles / services, appended after the built-ins.
+    /// User-added vehicles / services / places, appended after the built-ins.
     @Published var customVehicles: [Vehicle]     = []
     @Published var customServices: [ServiceType] = []
+    @Published var customPlaces:   [Place]       = []
 
     /// Full pick lists used by the trip form and breakdowns:
     /// built-ins first, then the driver's custom additions.
     var allVehicles: [Vehicle]     { Vehicle.builtIns + customVehicles }
     var allServices: [ServiceType] { ServiceType.builtIns + customServices }
+    var allPlaces:   [Place]       { Place.builtIns + customPlaces }
 
     /// Label shown on screen and in PDF exports: the company name when set,
     /// otherwise the driver's name.
@@ -34,6 +36,7 @@ class TimesheetStore: ObservableObject {
     private let companyNameKey      = "kauai_vip_2026_company_name"
     private let customVehiclesKey   = "kauai_vip_2026_custom_vehicles"
     private let customServicesKey   = "kauai_vip_2026_custom_services"
+    private let customPlacesKey     = "kauai_vip_2026_custom_places"
 
     // Documents-directory file URL — survives reinstall via iCloud/iTunes backup
     private var periodsFileURL: URL {
@@ -89,6 +92,24 @@ class TimesheetStore: ObservableObject {
     func removeCustomService(_ service: ServiceType) {
         customServices.removeAll { $0 == service }
         UserDefaults.standard.set(customServices.map(\.rawValue), forKey: customServicesKey)
+    }
+
+    /// Adds a custom place. No-ops on blank input or a case-insensitive
+    /// collision with any built-in place's name OR alias (adding "Hyatt"
+    /// would double-tag every Grand Hyatt trip).
+    func addCustomPlace(_ rawName: String) {
+        let name = rawName.trimmingCharacters(in: .whitespaces)
+        let key  = name.lowercased()
+        guard !name.isEmpty,
+              !allPlaces.contains(where: { $0.aliases.contains(key) || $0.name.lowercased() == key })
+        else { return }
+        customPlaces.append(Place(name: name))
+        UserDefaults.standard.set(customPlaces.map(\.name), forKey: customPlacesKey)
+    }
+
+    func removeCustomPlace(_ place: Place) {
+        customPlaces.removeAll { $0 == place }
+        UserDefaults.standard.set(customPlaces.map(\.name), forKey: customPlacesKey)
     }
 
     // MARK: - Sorting (newest startDate first)
@@ -214,6 +235,10 @@ class TimesheetStore: ObservableObject {
             UserDefaults.standard.array(forKey: customServicesKey) as? [String] ?? [],
             against: ServiceType.builtIns.map(\.rawValue)
         ).map { ServiceType(rawValue: $0) }
+        customPlaces = Self.sanitize(
+            UserDefaults.standard.array(forKey: customPlacesKey) as? [String] ?? [],
+            against: Place.builtIns.flatMap { [$0.name] + $0.aliases }
+        ).map { Place(name: $0) }
     }
 
     /// Drops blanks, built-in collisions, and case-insensitive duplicates from a

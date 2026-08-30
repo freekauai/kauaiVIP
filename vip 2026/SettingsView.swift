@@ -22,6 +22,7 @@ struct SettingsView: View {
     @State private var companyInput:          String = ""
     @State private var newVehicleInput:       String = ""
     @State private var newServiceInput:       String = ""
+    @State private var newPlaceInput:         String = ""
     @State private var showClearConfirmation: Bool   = false
 
     private var appVersion: String {
@@ -49,6 +50,7 @@ struct SettingsView: View {
                         driverNameSection
                         vehiclesSection
                         servicesSection
+                        placesSection
                         themeSection
                         countdownSection
                         biometricsSection
@@ -190,6 +192,33 @@ struct SettingsView: View {
                 addRow(placeholder: "Add a service…", text: $newServiceInput) {
                     store.addCustomService(newServiceInput)
                     newServiceInput = ""
+                }
+            }
+        }
+    }
+
+    // MARK: - Places
+
+    private var placesSection: some View {
+        AppCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("PLACES").labelStyle()
+                Text("Matched in trip notes — “pickup at Grand Hyatt to LIH” tags both places on the card and in Stats. Add your own hotels or stops.")
+                    .font(.system(size: AppTheme.footnote))
+                    .foregroundColor(AppTheme.textTertiary)
+
+                VStack(spacing: 8) {
+                    ForEach(store.allPlaces) { p in
+                        itemRow(icon: p.icon, name: p.name,
+                                isBuiltIn: Place.builtIns.contains(p)) {
+                            store.removeCustomPlace(p)
+                        }
+                    }
+                }
+
+                addRow(placeholder: "Add a place…", text: $newPlaceInput) {
+                    store.addCustomPlace(newPlaceInput)
+                    newPlaceInput = ""
                 }
             }
         }

@@ -80,6 +80,41 @@ extension ServiceType {
     static let builtIns: [ServiceType] = [.airport, .charter]
 }
 
+// MARK: - Place
+/// A known pickup/drop-off place, matched against trip NOTES text (that's
+/// where the paste importer puts the route line — "pickup at Grand Hyatt to
+/// Lihue Airport"). Matching is case-insensitive on word boundaries, so the
+/// "lih" alias tags "LIH" but not "Kalihiwai". Built-ins carry extra aliases;
+/// driver-added places (Settings) match on their name only.
+struct Place: Hashable, Identifiable {
+    let name:    String
+    let aliases: [String]        // lowercase; always includes the name
+    var icon:    String = "📍"
+
+    var id: String { name }
+
+    init(name: String, aliases: [String] = [], icon: String = "📍") {
+        self.name    = name
+        self.aliases = aliases.isEmpty ? [name.lowercased()] : aliases
+        self.icon    = icon
+    }
+}
+
+extension Place {
+    /// Ships with the app — mirrors the Kauai Route Map locations. Never
+    /// deletable; the driver adds custom places in Settings.
+    static let builtIns: [Place] = [
+        Place(name: "Lihue Airport", aliases: ["lih", "airport", "lihue airport"], icon: "✈️"),
+        Place(name: "Grand Hyatt",   aliases: ["hyatt", "grand hyatt"],            icon: "🏨"),
+        Place(name: "Princeville",   aliases: ["princeville"],                     icon: "🏡"),
+        Place(name: "Hanalei",       aliases: ["hanalei"],                         icon: "🌉"),
+        Place(name: "Kapaa",         aliases: ["kapaa", "kapa'a"],                 icon: "🏘️"),
+        Place(name: "Poipu",         aliases: ["poipu", "po'ipu"],                 icon: "🏖️"),
+        Place(name: "Koloa",         aliases: ["koloa"],                           icon: "🌺"),
+        Place(name: "Waimea",        aliases: ["waimea"],                          icon: "🏔️"),
+    ]
+}
+
 // MARK: - Trip
 struct Trip: Identifiable, Codable {
     var id:           UUID        = UUID()
@@ -202,6 +237,19 @@ struct Trip: Identifiable, Codable {
         let times = orderedTimes
         guard let start = times.first, let end = times.last, end > start else { return false }
         return now >= start && now <= end
+    }
+
+    /// Known places mentioned in this trip's notes, in `allPlaces` order.
+    /// Word-boundary, case-insensitive — see `Place` for the alias rules.
+    func places(from allPlaces: [Place]) -> [Place] {
+        guard !notes.isEmpty else { return [] }
+        let text = notes.lowercased()
+        return allPlaces.filter { place in
+            place.aliases.contains { alias in
+                text.range(of: "\\b\(NSRegularExpression.escapedPattern(for: alias))\\b",
+                           options: .regularExpression) != nil
+            }
+        }
     }
 
     var formattedDate: String {

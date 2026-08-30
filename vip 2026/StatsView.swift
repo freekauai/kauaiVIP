@@ -162,6 +162,8 @@ struct StatsView: View {
             SectionLabel(text: "By Vehicle")
             vehicleBreakdown(trips: allTrips)
                 .padding(.horizontal, AppTheme.screenPad)
+
+            placeSection(trips: allTrips)
         }
     }
 
@@ -222,6 +224,8 @@ struct StatsView: View {
                 SectionLabel(text: "By Vehicle")
                 vehicleBreakdown(trips: period.trips)
                     .padding(.horizontal, AppTheme.screenPad)
+
+                placeSection(trips: period.trips)
             }
 
             Divider()
@@ -287,6 +291,8 @@ struct StatsView: View {
                 SectionLabel(text: "By Vehicle")
                 vehicleBreakdown(trips: trips)
                     .padding(.horizontal, AppTheme.screenPad)
+
+                placeSection(trips: trips)
             }
 
             Divider()
@@ -377,6 +383,69 @@ struct StatsView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Place Breakdown Card
+
+    /// Trips-per-place, most-visited first. A trip can mention several
+    /// places, so counts overlap — each row's % is "share of trips that
+    /// touch this place", not slices of a pie.
+    private func placeCounts(in trips: [Trip]) -> [(place: Place, count: Int)] {
+        var counts: [Place: Int] = [:]
+        for t in trips {
+            for p in t.places(from: store.allPlaces) { counts[p, default: 0] += 1 }
+        }
+        return counts
+            .sorted { $0.value == $1.value ? $0.key.name < $1.key.name : $0.value > $1.value }
+            .map { (place: $0.key, count: $0.value) }
+    }
+
+    private func placeBreakdown(counts: [(place: Place, count: Int)], tripCount: Int) -> some View {
+        AppCard {
+            VStack(spacing: 10) {
+                ForEach(counts, id: \.place) { entry in
+                    let pct = tripCount == 0 ? 0 : Int((Double(entry.count) / Double(tripCount) * 100).rounded())
+                    HStack(spacing: 10) {
+                        Text(entry.place.icon)
+                            .font(.system(size: 16))
+                            .frame(width: 24)
+                        Text(entry.place.name)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(AppTheme.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .frame(width: 90, alignment: .leading)
+                        GeometryReader { geo in
+                            let fraction = tripCount == 0 ? 0.0 : CGFloat(entry.count) / CGFloat(tripCount)
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(AppTheme.coral)
+                                .frame(width: max(4, geo.size.width * fraction), height: 10)
+                                .frame(maxHeight: .infinity)
+                        }
+                        .frame(height: 10)
+                        Text("\(entry.count)")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(AppTheme.textPrimary)
+                            .frame(width: 28, alignment: .trailing)
+                        Text("\(pct)%")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(AppTheme.textTertiary)
+                            .frame(width: 38, alignment: .trailing)
+                    }
+                }
+            }
+        }
+    }
+
+    /// "By Place" section — omitted entirely when no notes mention a place.
+    @ViewBuilder
+    private func placeSection(trips: [Trip]) -> some View {
+        let counts = placeCounts(in: trips)
+        if !counts.isEmpty {
+            SectionLabel(text: "By Place")
+            placeBreakdown(counts: counts, tripCount: trips.count)
+                .padding(.horizontal, AppTheme.screenPad)
         }
     }
 
